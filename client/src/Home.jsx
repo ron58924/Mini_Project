@@ -1,11 +1,12 @@
-import Navbar from "./navbar.jsx";
+import Navbar from "./Navbar";
+import React from "react";
 
 function Home() {
   return (
     <>
       <Navbar />
       <div>
-        <h2>Welcome to the Home Page!</h2>
+        <h2>โปรแกรมจัดการ พนักงาน และ ลูกค้า</h2>
         <p>This is the homepage of our website.</p>
       </div>
     </>

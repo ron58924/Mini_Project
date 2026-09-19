@@ -3,23 +3,34 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { Modal } from "bootstrap";
-import Navbar from "./navbar"; // เช็กชื่อไฟล์ในเครื่องด้วยว่าใช้ navbar.jsx หรือ Navbar.jsx
-import "./Employee.css";
+import "./App.css";
+import Navbar from "./Navbar";
 
 // =====================================================
 // API URL
 // =====================================================
 const API_URL = "http://localhost:5000/api/mutemp";
 
-function Employee() {
+function App() {
   // =====================================================
-  // States
+  // Employees
   // =====================================================
   const [employees, setEmployees] = useState([]);
+
+  // =====================================================
+  // Search
+  // =====================================================
   const [search, setSearch] = useState("");
+
+  // =====================================================
+  // Pagination
+  // =====================================================
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  // =====================================================
+  // Form State
+  // =====================================================
   const [form, setForm] = useState({
     empname: "",
     empaddress: "",
@@ -28,33 +39,29 @@ function Employee() {
     salary: "",
   });
 
+  // State สำหรับจัดการ Checkbox Permission (4 สิทธิ์)
+  const [permState, setPermState] = useState({
+    employee: false,
+    customer: false,
+    product: false,
+    report: false,
+  });
+
+  // =====================================================
+  // Edit Mode
+  // =====================================================
   const [editMode, setEditMode] = useState(false);
   const [editId, setEditId] = useState(null);
 
   // =====================================================
-  // Load Employees Initial
+  // Load Employees
   // =====================================================
   useEffect(() => {
-    const getInitialData = async () => {
-      try {
-        const response = await axios.get(API_URL);
-        setEmployees(response.data);
-        console.log("GET EMPLOYEES:", response.data);
-      } catch (error) {
-        console.error("GET ERROR:", error);
-        Swal.fire({
-          icon: "error",
-          title: "Error",
-          text: "ไม่สามารถโหลดข้อมูล Employee ได้",
-        });
-      }
-    };
-
-    getInitialData();
+    fetchEmployees();
   }, []);
 
   // =====================================================
-  // Re-fetch Employees Function
+  // GET Employees
   // =====================================================
   const fetchEmployees = async () => {
     try {
@@ -72,7 +79,7 @@ function Employee() {
   };
 
   // =====================================================
-  // Handle Input
+  // Handle Input Change
   // =====================================================
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -80,6 +87,34 @@ function Employee() {
       ...prev,
       [name]: value,
     }));
+  };
+
+  // Handle Checkbox Permission
+  const handlePermChange = (e) => {
+    const { name, checked } = e.target;
+    setPermState((prev) => ({
+      ...prev,
+      [name]: checked,
+    }));
+  };
+
+  // แปลง Checkbox State เป็น String 4 หลัก เช่น "0111"
+  const getPermissionString = () => {
+    const p1 = permState.employee ? "1" : "0";
+    const p2 = permState.customer ? "1" : "0";
+    const p3 = permState.product ? "1" : "0";
+    const p4 = permState.report ? "1" : "0";
+    return `${p1}${p2}${p3}${p4}`;
+  };
+
+  // แปลง String 4 หลัก เช่น "0111" กลับเป็น Checkbox State
+  const setPermissionFromString = (permStr = "0000") => {
+    setPermState({
+      employee: permStr[0] === "1",
+      customer: permStr[1] === "1",
+      product: permStr[2] === "1",
+      report: permStr[3] === "1",
+    });
   };
 
   // =====================================================
@@ -93,6 +128,12 @@ function Employee() {
       emppassword: "",
       salary: "",
     });
+    setPermState({
+      employee: false,
+      customer: false,
+      product: false,
+      report: false,
+    });
     setEditMode(false);
     setEditId(null);
   };
@@ -103,9 +144,7 @@ function Employee() {
   const closeModal = () => {
     const modalElement = document.getElementById("employeeModal");
     if (modalElement) {
-      const modal =
-        Modal.getInstance(modalElement) ||
-        Modal.getOrCreateInstance(modalElement);
+      const modal = Modal.getInstance(modalElement);
       if (modal) {
         modal.hide();
       }
@@ -118,25 +157,26 @@ function Employee() {
   const handleCreate = async (e) => {
     e.preventDefault();
     try {
-      console.log("Sending CREATE:", form);
-      const response = await axios.post(API_URL, form);
+      const payload = {
+        ...form,
+        permission: getPermissionString(),
+      };
+      console.log("Sending CREATE:", payload);
+      const response = await axios.post(API_URL, payload);
       console.log("CREATE RESPONSE:", response.data);
 
       await fetchEmployees();
       clearForm();
       closeModal();
 
-      const createdId = response.data.empId ?? response.data.EMPID ?? "";
-
       await Swal.fire({
         icon: "success",
         title: "Saved!",
-        text: `เพิ่ม Employee สำเร็จ\nEmployee ID: ${createdId}`,
+        text: `เพิ่ม Employee สำเร็จ\nEmployee ID: ${response.data.empId || ""}`,
         confirmButtonText: "OK",
       });
     } catch (error) {
       console.error("CREATE ERROR:", error);
-      console.error("CREATE RESPONSE:", error.response);
       Swal.fire({
         icon: "error",
         title: "Save Failed",
@@ -159,21 +199,16 @@ function Employee() {
   // OPEN EDIT MODAL
   // =====================================================
   const handleEdit = (employee) => {
-    const id = employee.empId ?? employee.EMPID;
-    const name = employee.empname ?? employee.EMPNAME;
-    const address = employee.empaddress ?? employee.EMPADDRESS;
-    const email = employee.empemail ?? employee.EMPEMAIL;
-    const salary = employee.salary ?? employee.SALARY;
-
     setEditMode(true);
-    setEditId(id);
+    setEditId(employee.empId);
     setForm({
-      empname: name || "",
-      empaddress: address || "",
-      empemail: email || "",
+      empname: employee.empname || "",
+      empaddress: employee.empaddress || "",
+      empemail: employee.empemail || "",
       emppassword: "",
-      salary: salary ?? "",
+      salary: employee.salary ?? "",
     });
+    setPermissionFromString(employee.permission);
 
     const modalElement = document.getElementById("employeeModal");
     if (modalElement) {
@@ -188,8 +223,12 @@ function Employee() {
   const handleUpdate = async (e) => {
     e.preventDefault();
     try {
-      console.log("Sending UPDATE:", form);
-      const response = await axios.put(`${API_URL}/${editId}`, form);
+      const payload = {
+        ...form,
+        permission: getPermissionString(),
+      };
+      console.log("Sending UPDATE:", payload);
+      const response = await axios.put(`${API_URL}/${editId}`, payload);
       console.log("UPDATE RESPONSE:", response.data);
 
       await fetchEmployees();
@@ -204,7 +243,6 @@ function Employee() {
       });
     } catch (error) {
       console.error("UPDATE ERROR:", error);
-      console.error("UPDATE RESPONSE:", error.response);
       Swal.fire({
         icon: "error",
         title: "Update Failed",
@@ -245,6 +283,7 @@ function Employee() {
 
       await fetchEmployees();
 
+      // ตรวจสอบ Pagination หลังลบ
       const remainingItems = filteredEmployees.length - 1;
       const newTotalPages = Math.ceil(remainingItems / itemsPerPage);
       if (currentPage > newTotalPages && newTotalPages > 0) {
@@ -266,25 +305,28 @@ function Employee() {
   };
 
   // =====================================================
-  // SEARCH
+  // FILTER & SEARCH
   // =====================================================
   const filteredEmployees = employees.filter((employee) => {
-    const id = employee.empId ?? employee.EMPID ?? "";
-    const name = employee.empname ?? employee.EMPNAME ?? "";
-    const address = employee.empaddress ?? employee.EMPADDRESS ?? "";
-    const email = employee.empemail ?? employee.EMPEMAIL ?? "";
-
     const keyword = search.toLowerCase();
     return (
-      String(id).toLowerCase().includes(keyword) ||
-      String(name).toLowerCase().includes(keyword) ||
-      String(address).toLowerCase().includes(keyword) ||
-      String(email).toLowerCase().includes(keyword)
+      String(employee.empId || "")
+        .toLowerCase()
+        .includes(keyword) ||
+      String(employee.empname || "")
+        .toLowerCase()
+        .includes(keyword) ||
+      String(employee.empaddress || "")
+        .toLowerCase()
+        .includes(keyword) ||
+      String(employee.empemail || "")
+        .toLowerCase()
+        .includes(keyword)
     );
   });
 
   // =====================================================
-  // PAGINATION
+  // PAGINATION CALCULATIONS
   // =====================================================
   const totalPages = Math.ceil(filteredEmployees.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -307,7 +349,6 @@ function Employee() {
   return (
     <>
       <Navbar />
-
       <div className="container py-4">
         {/* HEADER */}
         <div className="d-flex justify-content-between align-items-center mb-4">
@@ -323,7 +364,7 @@ function Employee() {
           </button>
         </div>
 
-        {/* SEARCH CARD */}
+        {/* SEARCH */}
         <div className="card shadow-sm mb-4">
           <div className="card-body">
             <div className="row">
@@ -346,7 +387,7 @@ function Employee() {
           </div>
         </div>
 
-        {/* TABLE CARD */}
+        {/* TABLE */}
         <div className="card shadow-sm">
           <div className="card-body">
             <div className="d-flex justify-content-between align-items-center mb-3">
@@ -358,7 +399,7 @@ function Employee() {
 
             <div className="table-responsive">
               <table className="table table-hover table-bordered align-middle">
-                <thead className="table-dark">
+                <thead className="table-primary">
                   <tr>
                     <th>#</th>
                     <th>Employee ID</th>
@@ -366,62 +407,59 @@ function Employee() {
                     <th>Address</th>
                     <th>Email</th>
                     <th>Salary</th>
+                    <th>Permission</th>
                     <th className="text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {currentEmployees.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="text-center py-4 text-muted">
+                      <td colSpan="8" className="text-center py-4 text-muted">
                         No employee data
                       </td>
                     </tr>
                   ) : (
-                    currentEmployees.map((employee, index) => {
-                      const id = employee.empId ?? employee.EMPID;
-                      const name = employee.empname ?? employee.EMPNAME;
-                      const address =
-                        employee.empaddress ?? employee.EMPADDRESS;
-                      const email = employee.empemail ?? employee.EMPEMAIL;
-                      const salary = employee.salary ?? employee.SALARY;
-
-                      return (
-                        <tr key={id || index}>
-                          <td>{startIndex + index + 1}</td>
-                          <td>
-                            <strong>{id}</strong>
-                          </td>
-                          <td>{name}</td>
-                          <td>{address}</td>
-                          <td>{email}</td>
-                          <td>{salary}</td>
-                          <td className="text-center">
-                            <button
-                              type="button"
-                              className="btn btn-warning btn-sm me-2"
-                              onClick={() => handleEdit(employee)}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-danger btn-sm"
-                              onClick={() => handleDelete(id)}
-                            >
-                              Delete
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
+                    currentEmployees.map((employee, index) => (
+                      <tr key={employee.empId}>
+                        <td>{startIndex + index + 1}</td>
+                        <td>
+                          <strong>{employee.empId}</strong>
+                        </td>
+                        <td>{employee.empname}</td>
+                        <td>{employee.empaddress}</td>
+                        <td>{employee.empemail}</td>
+                        <td>{employee.salary}</td>
+                        <td>
+                          <span className="badge bg-info text-dark">
+                            {employee.permission || "0000"}
+                          </span>
+                        </td>
+                        <td className="text-center">
+                          <button
+                            type="button"
+                            className="btn btn-warning btn-sm me-2"
+                            onClick={() => handleEdit(employee)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-danger btn-sm"
+                            onClick={() => handleDelete(employee.empId)}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
             </div>
 
-            {/* PAGINATION */}
+            {/* PAGINATION BUTTONS */}
             {totalPages > 0 && (
-              <nav className="mt-3">
+              <nav>
                 <ul className="pagination justify-content-center mb-0">
                   <li
                     className={`page-item ${currentPage === 1 ? "disabled" : ""}`}
@@ -439,9 +477,7 @@ function Employee() {
                   {Array.from({ length: totalPages }, (_, index) => (
                     <li
                       key={index}
-                      className={`page-item ${
-                        currentPage === index + 1 ? "active" : ""
-                      }`}
+                      className={`page-item ${currentPage === index + 1 ? "active" : ""}`}
                     >
                       <button
                         type="button"
@@ -454,9 +490,7 @@ function Employee() {
                   ))}
 
                   <li
-                    className={`page-item ${
-                      currentPage === totalPages ? "disabled" : ""
-                    }`}
+                    className={`page-item ${currentPage === totalPages ? "disabled" : ""}`}
                   >
                     <button
                       type="button"
@@ -473,18 +507,17 @@ function Employee() {
           </div>
         </div>
 
-        {/* ADD / EDIT MODAL */}
+        {/* MODAL (ADD / EDIT) */}
         <div
           className="modal fade"
           id="employeeModal"
           tabIndex="-1"
-          aria-labelledby="employeeModalLabel"
           aria-hidden="true"
         >
           <div className="modal-dialog modal-lg">
             <div className="modal-content">
               <div className="modal-header">
-                <h5 className="modal-title" id="employeeModalLabel">
+                <h5 className="modal-title">
                   {editMode ? "Edit Employee" : "Add Employee"}
                 </h5>
                 <button
@@ -503,7 +536,7 @@ function Employee() {
                       <input
                         type="text"
                         className="form-control"
-                        value={editId || ""}
+                        value={editId}
                         disabled
                       />
                     </div>
@@ -566,11 +599,6 @@ function Employee() {
                       }
                       required={!editMode}
                     />
-                    {editMode && (
-                      <div className="form-text">
-                        Leave blank to keep current password.
-                      </div>
-                    )}
                   </div>
 
                   <div className="mb-3">
@@ -584,6 +612,67 @@ function Employee() {
                       placeholder="Enter salary"
                       min="0"
                     />
+                  </div>
+
+                  {/* PERMISSION CHECKBOXES */}
+                  <div className="mb-3">
+                    <label className="form-label fw-bold">
+                      Menu Permissions
+                    </label>
+                    <div className="d-flex gap-3">
+                      <div className="form-check">
+                        <input
+                          type="checkbox"
+                          className="form-check-input"
+                          id="permEmp"
+                          name="employee"
+                          checked={permState.employee}
+                          onChange={handlePermChange}
+                        />
+                        <label className="form-check-label" htmlFor="permEmp">
+                          Employee
+                        </label>
+                      </div>
+                      <div className="form-check">
+                        <input
+                          type="checkbox"
+                          className="form-check-input"
+                          id="permCus"
+                          name="customer"
+                          checked={permState.customer}
+                          onChange={handlePermChange}
+                        />
+                        <label className="form-check-label" htmlFor="permCus">
+                          Customer
+                        </label>
+                      </div>
+                      <div className="form-check">
+                        <input
+                          type="checkbox"
+                          className="form-check-input"
+                          id="permProd"
+                          name="product"
+                          checked={permState.product}
+                          onChange={handlePermChange}
+                        />
+                        <label className="form-check-label" htmlFor="permProd">
+                          Product
+                        </label>
+                      </div>
+                      <div className="form-check">
+                        <input
+                          type="checkbox"
+                          className="form-check-input"
+                          id="permRep"
+                          name="report"
+                          checked={permState.report}
+                          onChange={handlePermChange}
+                        />
+                        <label className="form-check-label" htmlFor="permRep">
+                          Report
+                        </label>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -609,4 +698,4 @@ function Employee() {
   );
 }
 
-export default Employee;
+export default App;

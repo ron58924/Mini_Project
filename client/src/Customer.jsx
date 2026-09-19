@@ -3,58 +3,30 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { Modal } from "bootstrap";
-import Navbar from "./navbar"; // เช็กชื่อไฟล์ navbar ในเครื่องของคุณ
-import "./Customer.css";
+import "./App.css";
+import Navbar from "./Navbar";
 
-// =====================================================
-// API URL
-// =====================================================
-const API_URL = "http://localhost:5000/api/mutcustomer";
+const API_URL = "http://localhost:5000/api/mutcus";
 
-function Customer() {
-  // =====================================================
-  // States
-  // =====================================================
+function App() {
   const [customers, setCustomers] = useState([]);
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-
   const [form, setForm] = useState({
-    cusname: "",
-    cusaddress: "",
-    custel: "",
-    cusemail: "",
+    cusName: "",
+    cusAddress: "",
+    cusTel: "",
+    cusEmail: "",
   });
 
   const [editMode, setEditMode] = useState(false);
   const [editId, setEditId] = useState(null);
 
-  // =====================================================
-  // Load Customers Initial
-  // =====================================================
   useEffect(() => {
-    const getInitialData = async () => {
-      try {
-        const response = await axios.get(API_URL);
-        setCustomers(response.data);
-        console.log("GET CUSTOMERS:", response.data);
-      } catch (error) {
-        console.error("GET ERROR:", error);
-        Swal.fire({
-          icon: "error",
-          title: "Error",
-          text: "ไม่สามารถโหลดข้อมูล Customer ได้",
-        });
-      }
-    };
-
-    getInitialData();
+    fetchCustomers();
   }, []);
 
-  // =====================================================
-  // Re-fetch Customers Function
-  // =====================================================
   const fetchCustomers = async () => {
     try {
       const response = await axios.get(API_URL);
@@ -62,6 +34,7 @@ function Customer() {
       console.log("GET CUSTOMERS:", response.data);
     } catch (error) {
       console.error("GET ERROR:", error);
+
       Swal.fire({
         icon: "error",
         title: "Error",
@@ -75,6 +48,7 @@ function Customer() {
   // =====================================================
   const handleChange = (e) => {
     const { name, value } = e.target;
+
     setForm((prev) => ({
       ...prev,
       [name]: value,
@@ -86,11 +60,12 @@ function Customer() {
   // =====================================================
   const clearForm = () => {
     setForm({
-      cusname: "",
-      cusaddress: "",
-      custel: "",
-      cusemail: "",
+      cusName: "",
+      cusAddress: "",
+      cusTel: "",
+      cusEmail: "",
     });
+
     setEditMode(false);
     setEditId(null);
   };
@@ -100,10 +75,10 @@ function Customer() {
   // =====================================================
   const closeModal = () => {
     const modalElement = document.getElementById("customerModal");
+
     if (modalElement) {
-      const modal =
-        Modal.getInstance(modalElement) ||
-        Modal.getOrCreateInstance(modalElement);
+      const modal = Modal.getInstance(modalElement);
+
       if (modal) {
         modal.hide();
       }
@@ -115,25 +90,36 @@ function Customer() {
   // =====================================================
   const handleCreate = async (e) => {
     e.preventDefault();
+
     try {
       console.log("Sending CREATE:", form);
+
       const response = await axios.post(API_URL, form);
+
       console.log("CREATE RESPONSE:", response.data);
 
+      // Refresh Data
       await fetchCustomers();
+
+      // Clear Form
       clearForm();
+
+      // Close Modal
       closeModal();
 
-      const createdId = response.data.cusId ?? response.data.CUSID ?? "";
-
+      // Success Message
       await Swal.fire({
         icon: "success",
         title: "Saved!",
-        text: `เพิ่ม Customer สำเร็จ\nCustomer ID: ${createdId}`,
+        text: `เพิ่ม Customer สำเร็จ${
+          response.data.cusId ? `\nCustomer ID: ${response.data.cusId}` : ""
+        }`,
         confirmButtonText: "OK",
       });
     } catch (error) {
       console.error("CREATE ERROR:", error);
+      console.error("CREATE RESPONSE:", error.response);
+
       Swal.fire({
         icon: "error",
         title: "Save Failed",
@@ -156,22 +142,19 @@ function Customer() {
   // OPEN EDIT MODAL
   // =====================================================
   const handleEdit = (customer) => {
-    const id = customer.cusId ?? customer.CUSID;
-    const name = customer.cusname ?? customer.CUSNAME;
-    const address = customer.cusaddress ?? customer.CUSADDRESS;
-    const tel = customer.custel ?? customer.CUSTEL;
-    const email = customer.cusemail ?? customer.CUSEMAIL;
-
     setEditMode(true);
-    setEditId(id);
+    setEditId(customer.cusId);
+
     setForm({
-      cusname: name || "",
-      cusaddress: address || "",
-      custel: tel || "",
-      cusemail: email || "",
+      cusName: customer.cusName || "",
+      cusAddress: customer.cusAddress || "",
+      cusTel: customer.cusTel || "",
+      cusEmail: customer.cusEmail || "",
     });
 
+    // Open Bootstrap Modal
     const modalElement = document.getElementById("customerModal");
+
     if (modalElement) {
       const modal = Modal.getOrCreateInstance(modalElement);
       modal.show();
@@ -183,15 +166,24 @@ function Customer() {
   // =====================================================
   const handleUpdate = async (e) => {
     e.preventDefault();
+
     try {
       console.log("Sending UPDATE:", form);
+
       const response = await axios.put(`${API_URL}/${editId}`, form);
+
       console.log("UPDATE RESPONSE:", response.data);
 
+      // Refresh Data
       await fetchCustomers();
+
+      // Clear Form
       clearForm();
+
+      // Close Modal
       closeModal();
 
+      // Success
       await Swal.fire({
         icon: "success",
         title: "Updated!",
@@ -200,6 +192,8 @@ function Customer() {
       });
     } catch (error) {
       console.error("UPDATE ERROR:", error);
+      console.error("UPDATE RESPONSE:", error.response);
+
       Swal.fire({
         icon: "error",
         title: "Update Failed",
@@ -226,10 +220,13 @@ function Customer() {
       cancelButtonText: "Cancel",
     });
 
-    if (!result.isConfirmed) return;
+    if (!result.isConfirmed) {
+      return;
+    }
 
     try {
       await axios.delete(`${API_URL}/${cusId}`);
+
       await Swal.fire({
         icon: "success",
         title: "Deleted!",
@@ -238,10 +235,13 @@ function Customer() {
         showConfirmButton: false,
       });
 
+      // Refresh Data
       await fetchCustomers();
 
+      // Check pagination after delete
       const remainingItems = filteredCustomers.length - 1;
       const newTotalPages = Math.ceil(remainingItems / itemsPerPage);
+
       if (currentPage > newTotalPages && newTotalPages > 0) {
         setCurrentPage(newTotalPages);
       } else if (newTotalPages === 0) {
@@ -249,6 +249,7 @@ function Customer() {
       }
     } catch (error) {
       console.error("DELETE ERROR:", error);
+
       Swal.fire({
         icon: "error",
         title: "Delete Failed",
@@ -264,19 +265,24 @@ function Customer() {
   // SEARCH
   // =====================================================
   const filteredCustomers = customers.filter((customer) => {
-    const id = customer.cusId ?? customer.CUSID ?? "";
-    const name = customer.cusname ?? customer.CUSNAME ?? "";
-    const address = customer.cusaddress ?? customer.CUSADDRESS ?? "";
-    const tel = customer.custel ?? customer.CUSTEL ?? "";
-    const email = customer.cusemail ?? customer.CUSEMAIL ?? "";
-
     const keyword = search.toLowerCase();
+
     return (
-      String(id).toLowerCase().includes(keyword) ||
-      String(name).toLowerCase().includes(keyword) ||
-      String(address).toLowerCase().includes(keyword) ||
-      String(tel).toLowerCase().includes(keyword) ||
-      String(email).toLowerCase().includes(keyword)
+      String(customer.cusId || "")
+        .toLowerCase()
+        .includes(keyword) ||
+      String(customer.cusName || "")
+        .toLowerCase()
+        .includes(keyword) ||
+      String(customer.cusAddress || "")
+        .toLowerCase()
+        .includes(keyword) ||
+      String(customer.cusTel || "")
+        .toLowerCase()
+        .includes(keyword) ||
+      String(customer.cusEmail || "")
+        .toLowerCase()
+        .includes(keyword)
     );
   });
 
@@ -284,34 +290,51 @@ function Customer() {
   // PAGINATION
   // =====================================================
   const totalPages = Math.ceil(filteredCustomers.length / itemsPerPage);
+
   const startIndex = (currentPage - 1) * itemsPerPage;
+
   const currentCustomers = filteredCustomers.slice(
     startIndex,
     startIndex + itemsPerPage,
   );
 
+  // =====================================================
+  // Search Change
+  // =====================================================
   const handleSearch = (e) => {
     setSearch(e.target.value);
+
+    // Search ใหม่กลับหน้า 1
     setCurrentPage(1);
   };
 
+  // =====================================================
+  // Change Page
+  // =====================================================
   const changePage = (page) => {
     if (page >= 1 && page <= totalPages) {
       setCurrentPage(page);
     }
   };
 
+  // =====================================================
+  // Render
+  // =====================================================
   return (
     <>
       <Navbar />
 
       <div className="container py-4">
-        {/* HEADER */}
+        {/* =================================================
+            HEADER
+        ================================================= */}
+
         <div className="d-flex justify-content-between align-items-center mb-4">
-          <h1 className="fw-bold text-dark">Customer Management</h1>
+          <h1 className="fw-bold">Customer Management</h1>
+
           <button
             type="button"
-            className="btn btn-primary shadow-sm"
+            className="btn btn-primary"
             data-bs-toggle="modal"
             data-bs-target="#customerModal"
             onClick={handleAdd}
@@ -320,20 +343,25 @@ function Customer() {
           </button>
         </div>
 
-        {/* SEARCH CARD */}
-        <div className="card shadow-sm mb-4 border-0">
+        {/* =================================================
+            SEARCH
+        ================================================= */}
+
+        <div className="card shadow-sm mb-4">
           <div className="card-body">
             <div className="row">
               <div className="col-md-6">
                 <label className="form-label fw-bold">Search Customer</label>
+
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="Search ID, name, address, tel or email..."
+                  placeholder="Search ID, name, address, telephone or email..."
                   value={search}
                   onChange={handleSearch}
                 />
               </div>
+
               <div className="col-md-6 d-flex align-items-end">
                 <div className="text-muted">
                   Found: <strong>{filteredCustomers.length}</strong> customer(s)
@@ -343,31 +371,36 @@ function Customer() {
           </div>
         </div>
 
-        {/* TABLE CARD */}
-        <div className="card shadow-sm border-0">
+        {/* =================================================
+            TABLE
+        ================================================= */}
+
+        <div className="card shadow-sm">
           <div className="card-body">
             <div className="d-flex justify-content-between align-items-center mb-3">
-              <h4 className="mb-0 fw-bold">Customer List</h4>
+              <h4 className="mb-0">Customer List</h4>
+
               <span className="badge text-bg-secondary">
-                Page {totalPages === 0 ? 0 : currentPage} / {totalPages}
+                Page {totalPages === 0 ? 0 : currentPage}
+                {" / "}
+                {totalPages}
               </span>
             </div>
 
             <div className="table-responsive">
-              <table className="table table-hover table-bordered align-middle mb-0">
+              <table className="table table-hover table-bordered align-middle">
                 <thead className="table-dark">
                   <tr>
-                    <th style={{ width: "50px" }}>#</th>
+                    <th>#</th>
                     <th>Customer ID</th>
                     <th>Name</th>
                     <th>Address</th>
                     <th>Telephone</th>
                     <th>Email</th>
-                    <th className="text-center" style={{ width: "150px" }}>
-                      Action
-                    </th>
+                    <th className="text-center">Action</th>
                   </tr>
                 </thead>
+
                 <tbody>
                   {currentCustomers.length === 0 ? (
                     <tr>
@@ -376,52 +409,49 @@ function Customer() {
                       </td>
                     </tr>
                   ) : (
-                    currentCustomers.map((customer, index) => {
-                      const id = customer.cusId ?? customer.CUSID;
-                      const name = customer.cusname ?? customer.CUSNAME;
-                      const address =
-                        customer.cusaddress ?? customer.CUSADDRESS;
-                      const tel = customer.custel ?? customer.CUSTEL;
-                      const email = customer.cusemail ?? customer.CUSEMAIL;
+                    currentCustomers.map((customer, index) => (
+                      <tr key={customer.cusId}>
+                        <td>{startIndex + index + 1}</td>
 
-                      return (
-                        <tr key={id || index}>
-                          <td>{startIndex + index + 1}</td>
-                          <td>
-                            <strong className="text-primary">{id}</strong>
-                          </td>
-                          <td className="fw-semibold">{name}</td>
-                          <td>{address}</td>
-                          <td>{tel}</td>
-                          <td>{email}</td>
-                          <td className="text-center">
-                            <button
-                              type="button"
-                              className="btn btn-warning btn-sm me-2"
-                              onClick={() => handleEdit(customer)}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-danger btn-sm"
-                              onClick={() => handleDelete(id)}
-                            >
-                              Delete
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
+                        <td>
+                          <strong>{customer.cusId}</strong>
+                        </td>
+                        <td>{customer.cusname}</td>
+                        <td>{customer.cusaddress}</td>
+                        <td>{customer.custel}</td>
+                        <td>{customer.cusemail}</td>
+                        <td className="text-center">
+                          <button
+                            type="button"
+                            className="btn btn-warning btn-sm me-2"
+                            onClick={() => handleEdit(customer)}
+                          >
+                            Edit
+                          </button>
+
+                          <button
+                            type="button"
+                            className="btn btn-danger btn-sm"
+                            onClick={() => handleDelete(customer.cusId)}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
             </div>
 
-            {/* PAGINATION */}
+            {/* =================================================
+                PAGINATION
+            ================================================= */}
+
             {totalPages > 0 && (
-              <nav className="mt-4">
+              <nav>
                 <ul className="pagination justify-content-center mb-0">
+                  {/* Previous */}
                   <li
                     className={`page-item ${
                       currentPage === 1 ? "disabled" : ""
@@ -437,6 +467,7 @@ function Customer() {
                     </button>
                   </li>
 
+                  {/* Page Number */}
                   {Array.from({ length: totalPages }, (_, index) => (
                     <li
                       key={index}
@@ -454,6 +485,7 @@ function Customer() {
                     </li>
                   ))}
 
+                  {/* Next */}
                   <li
                     className={`page-item ${
                       currentPage === totalPages ? "disabled" : ""
@@ -474,7 +506,10 @@ function Customer() {
           </div>
         </div>
 
-        {/* ADD / EDIT MODAL */}
+        {/* =================================================
+            ADD / EDIT MODAL
+        ================================================= */}
+
         <div
           className="modal fade"
           id="customerModal"
@@ -484,87 +519,114 @@ function Customer() {
         >
           <div className="modal-dialog modal-lg">
             <div className="modal-content">
-              <div className="modal-header bg-primary text-white">
-                <h5 className="modal-title fw-bold" id="customerModalLabel">
+              {/* Modal Header */}
+              <div className="modal-header">
+                <h5 className="modal-title" id="customerModalLabel">
                   {editMode ? "Edit Customer" : "Add Customer"}
                 </h5>
+
                 <button
                   type="button"
-                  className="btn-close btn-close-white"
+                  className="btn-close"
                   data-bs-dismiss="modal"
                   onClick={clearForm}
                 ></button>
               </div>
 
+              {/* Modal Form */}
               <form onSubmit={editMode ? handleUpdate : handleCreate}>
                 <div className="modal-body">
+                  {/* =================================
+                      Customer ID
+                  ================================= */}
+
                   {editMode && (
                     <div className="mb-3">
                       <label className="form-label fw-bold">Customer ID</label>
+
                       <input
                         type="text"
-                        className="form-control bg-light"
-                        value={editId || ""}
+                        className="form-control"
+                        value={editId}
                         disabled
                       />
                     </div>
                   )}
 
+                  {/* =================================
+                      Customer Name
+                  ================================= */}
+
                   <div className="mb-3">
-                    <label className="form-label fw-semibold">
-                      Customer Name <span className="text-danger">*</span>
-                    </label>
+                    <label className="form-label">Customer Name</label>
+
                     <input
                       type="text"
                       className="form-control"
-                      name="cusname"
-                      value={form.cusname}
+                      name="cusName"
+                      value={form.cusName}
                       onChange={handleChange}
                       placeholder="Enter customer name"
                       required
                     />
                   </div>
 
+                  {/* =================================
+                      Address
+                  ================================= */}
+
                   <div className="mb-3">
-                    <label className="form-label fw-semibold">Address</label>
+                    <label className="form-label">Address</label>
+
                     <textarea
                       className="form-control"
-                      name="cusaddress"
-                      value={form.cusaddress}
+                      name="cusAddress"
+                      value={form.cusAddress}
                       onChange={handleChange}
-                      placeholder="Enter address"
+                      placeholder="Enter customer address"
                       rows="3"
                     ></textarea>
                   </div>
 
-                  <div className="row">
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label fw-semibold">
-                        Telephone
-                      </label>
-                      <input
-                        type="tel"
-                        className="form-control"
-                        name="custel"
-                        value={form.custel}
-                        onChange={handleChange}
-                        placeholder="e.g. 0812345678"
-                      />
-                    </div>
+                  {/* =================================
+                      Telephone
+                  ================================= */}
 
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label fw-semibold">Email</label>
-                      <input
-                        type="email"
-                        className="form-control"
-                        name="cusemail"
-                        value={form.cusemail}
-                        onChange={handleChange}
-                        placeholder="e.g. customer@email.com"
-                      />
-                    </div>
+                  <div className="mb-3">
+                    <label className="form-label">Telephone</label>
+
+                    <input
+                      type="tel"
+                      className="form-control"
+                      name="cusTel"
+                      value={form.cusTel}
+                      onChange={handleChange}
+                      placeholder="Enter telephone number"
+                    />
+                  </div>
+
+                  {/* =================================
+                      Email
+                  ================================= */}
+
+                  <div className="mb-3">
+                    <label className="form-label">Email</label>
+
+                    <input
+                      type="email"
+                      className="form-control"
+                      name="cusEmail"
+                      value={form.cusEmail}
+                      onChange={handleChange}
+                      placeholder="Enter customer email"
+                      required
+                    />
                   </div>
                 </div>
+
+                {/* =================================================
+                    MODAL FOOTER
+                ================================================= */}
 
                 <div className="modal-footer">
                   <button
@@ -575,6 +637,7 @@ function Customer() {
                   >
                     Cancel
                   </button>
+
                   <button type="submit" className="btn btn-primary">
                     {editMode ? "Update Customer" : "Save Customer"}
                   </button>
@@ -588,4 +651,4 @@ function Customer() {
   );
 }
 
-export default Customer;
+export default App;
