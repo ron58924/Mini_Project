@@ -1,0 +1,58 @@
+/* Customer.css */
+
+/* Custom Card & Table Styles */
+.card {
+  border-radius: 10px;
+  transition: all 0.2s ease-in-out;
+}
+
+.table th {
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+  letter-spacing: 0.5px;
+}
+
+.table td {
+  vertical-align: middle;
+}
+
+/* Hover Animation for Rows */
+.table-hover tbody tr:hover {
+  background-color: rgba(13, 110, 253, 0.04);
+}
+
+/* Pagination Customizations */
+.pagination .page-link {
+  color: #0d6efd;
+  border-radius: 6px;
+  margin: 0 2px;
+}
+
+.pagination .page-item.active .page-link {
+  background-color: #0d6efd;
+  border-color: #0d6efd;
+  color: #fff;
+}
+
+/* Modal Enhancements */
+.modal-content {
+  border: none;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
+.modal-header {
+  border-bottom: none;
+}
+
+.modal-footer {
+  border-top: 1px solid #f1f1f1;
+}
+
+/* Input Focus Glow */
+.form-control:focus {
+  border-color: #86b7fe;
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15);
+}
