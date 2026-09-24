@@ -70,8 +70,8 @@ app.post("/api/login", async (req, res) => {
     }
 
     const row = result.rows[0];
-    //const isMatch = await bcrypt.compare(password, row[4]);
-    const isMatch = (password === row[4]);
+    const isMatch = await bcrypt.compare(password, row[4]);
+    //const isMatch = (password === row[4]);
 
     if (!isMatch) {
       return res.status(401).json({ message: "อีเมลหรือรหัสผ่านไม่ถูกต้อง" });
@@ -110,31 +110,49 @@ app.post("/api/login", async (req, res) => {
 });
 
 // =====================================================
-// GET ALL USERS (ดึงข้อมูลผู้ใช้งานทั้งหมด)
+// GENERATE USER ID (USR001, USR002, ...)
 // =====================================================
-app.get("/api/USERS", async (req, res) => {
+async function generateUserCode(connection) {
+  const result = await connection.execute(
+    // แก้จาก 'U%' เป็น 'USR%' เพื่อให้เจาะจงเฉพาะรหัสผู้ใช้
+    `SELECT MAX(user_code) AS MAXID FROM users WHERE user_code LIKE 'USR%'`
+  );
+  let runningNumber = 1;
+  if (result.rows[0][0]) {
+    const maxId = result.rows[0][0]; // ตัวอย่างข้อมูลที่ได้มาคือ 'USR001'
+    
+    // แก้จาก substring(1) เป็น substring(3) เพื่อตัดคำว่า "USR" ออก เหลือแค่ "001"
+    const lastNumber = parseInt(maxId.substring(3), 10); 
+    runningNumber = lastNumber + 1;
+  }
+  
+  // แก้จาก `U${...}` เป็น `USR${...}`
+  return `USR${String(runningNumber).padStart(3, "0")}`;
+}
+
+// =====================================================
+// GET ALL USERS
+// =====================================================
+app.get("/api/users", async (req, res) => {
   let connection;
   try {
     connection = await getConnection();
     const result = await connection.execute(
-      `SELECT user_code, first_name, last_name, email, role_code, dept_code 
+      `SELECT user_code, first_name, last_name, email, username, role_code, dept_code 
        FROM users 
        ORDER BY user_code`
     );
-    
-    // แปลงข้อมูลจาก Array เป็น Object เพื่อให้ Frontend นำไปใช้ง่ายๆ
     const users = result.rows.map((row) => ({
       user_code: row[0],
       first_name: row[1],
       last_name: row[2],
       email: row[3],
-      role_code: row[4],
-      dept_code: row[5]
+      username: row[4],
+      role_code: row[5],
+      dept_code: row[6],
     }));
-
     res.json(users);
   } catch (error) {
-    console.error(error);
     res.status(500).json({ message: "Cannot get users", error: error.message });
   } finally {
     if (connection) await connection.close();
@@ -142,131 +160,92 @@ app.get("/api/USERS", async (req, res) => {
 });
 
 // =====================================================
-// CREATE EMPLOYEE
+// CREATE USER
 // =====================================================
-app.post("/api/mutemp", async (req, res) => {
+app.post("/api/users", async (req, res) => {
   let connection;
   try {
-    const { empname, empaddress, empemail, emppassword, salary, permission } =
-      req.body;
-    if (!emppassword || emppassword.trim() === "") {
+    const { first_name, last_name, email, username, password, role_code, dept_code } = req.body;
+    if (!password || password.trim() === "") {
       return res.status(400).json({ message: "Password is required" });
     }
+    
     connection = await getConnection();
-    const empId = await generateEmpId(connection);
-    const hashedPassword = await bcrypt.hash(emppassword, 10);
-    const permCode = permission || "0000";
+    const user_code = await generateUserCode(connection);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     await connection.execute(
-      `INSERT INTO MUTEMP(EMPID, EMPNAME, EMPADDRESS, EMPEMAIL, EMPPASSWORD, SALARY, PERMISSION)
-       VALUES(:empId, :empname, :empaddress, :empemail, :emppassword, :salary, :permission)`,
+      `INSERT INTO users(user_code, first_name, last_name, email, username, password, role_code, dept_code)
+       VALUES(:user_code, :first_name, :last_name, :email, :username, :password, :role_code, :dept_code)`,
       {
-        empId,
-        empname,
-        empaddress,
-        empemail,
-        emppassword: hashedPassword,
-        salary,
-        permission: permCode,
+        user_code, first_name, last_name, email, username,
+        password: hashedPassword, role_code, dept_code
       },
-      { autoCommit: true },
+      { autoCommit: true }
     );
 
-    res.status(201).json({ message: "Employee created successfully", empId });
+    res.status(201).json({ message: "User created successfully", user_code });
   } catch (error) {
-    console.error(error);
-    res
-      .status(500)
-      .json({ message: "Cannot create employee", error: error.message });
+    res.status(500).json({ message: "Cannot create user", error: error.message });
   } finally {
     if (connection) await connection.close();
   }
 });
 
 // =====================================================
-// UPDATE EMPLOYEE
+// UPDATE USER
 // =====================================================
-app.put("/api/mutemp/:id", async (req, res) => {
+app.put("/api/users/:id", async (req, res) => {
   let connection;
   try {
-    const empId = req.params.id;
-    const { empname, empaddress, empemail, emppassword, salary, permission } =
-      req.body;
+    const user_code = req.params.id;
+    const { first_name, last_name, email, username, password, role_code, dept_code } = req.body;
     connection = await getConnection();
-    const permCode = permission || "0000";
 
-    if (emppassword && emppassword.trim() !== "") {
-      const hashedPassword = await bcrypt.hash(emppassword, 10);
+    if (password && password.trim() !== "") {
+      const hashedPassword = await bcrypt.hash(password, 10);
       await connection.execute(
-        `UPDATE MUTEMP SET
-        EMPNAME = :empname,
-        EMPADDRESS = :empaddress,
-        EMPEMAIL = :empemail,
-        EMPPASSWORD = :emppassword,
-        SALARY = :salary,
-        PERMISSION = :permission
-        WHERE EMPID = :empId`,
-        {
-          empId,
-          empname,
-          empaddress,
-          empemail,
-          emppassword: hashedPassword,
-          salary,
-          permission: permCode,
-        },
-        { autoCommit: true },
+        `UPDATE users SET 
+         first_name = :first_name, last_name = :last_name, email = :email, 
+         username = :username, password = :password, role_code = :role_code, dept_code = :dept_code 
+         WHERE user_code = :user_code`,
+        { user_code, first_name, last_name, email, username, password: hashedPassword, role_code, dept_code },
+        { autoCommit: true }
       );
     } else {
       await connection.execute(
-        `UPDATE MUTEMP SET
-        EMPNAME = :empname,
-        EMPADDRESS = :empaddress,
-        EMPEMAIL = :empemail,
-        SALARY = :salary,
-        PERMISSION = :permission
-        WHERE EMPID = :empId`,
-        {
-          empId,
-          empname,
-          empaddress,
-          empemail,
-          salary,
-          permission: permCode,
-        },
-        { autoCommit: true },
+        `UPDATE users SET 
+         first_name = :first_name, last_name = :last_name, email = :email, 
+         username = :username, role_code = :role_code, dept_code = :dept_code 
+         WHERE user_code = :user_code`,
+        { user_code, first_name, last_name, email, username, role_code, dept_code },
+        { autoCommit: true }
       );
     }
-    res.json({ message: "Employee updated successfully" });
+    res.json({ message: "User updated successfully" });
   } catch (error) {
-    console.error(error);
-    res
-      .status(500)
-      .json({ message: "Cannot update employee", error: error.message });
+    res.status(500).json({ message: "Cannot update user", error: error.message });
   } finally {
     if (connection) await connection.close();
   }
 });
 
 // =====================================================
-// DELETE EMPLOYEE
+// DELETE USER
 // =====================================================
-app.delete("/api/mutemp/:id", async (req, res) => {
+app.delete("/api/users/:id", async (req, res) => {
   let connection;
   try {
-    const empId = req.params.id;
+    const user_code = req.params.id;
     connection = await getConnection();
     await connection.execute(
-      `DELETE FROM MUTEMP WHERE EMPID = :empId`,
-      { empId },
-      { autoCommit: true },
+      `DELETE FROM users WHERE user_code = :user_code`,
+      { user_code },
+      { autoCommit: true }
     );
-    res.json({ message: "Employee deleted successfully" });
+    res.json({ message: "User deleted successfully" });
   } catch (error) {
-    console.error(error);
-    res
-      .status(500)
-      .json({ message: "Cannot delete employee", error: error.message });
+    res.status(500).json({ message: "Cannot delete user", error: error.message });
   } finally {
     if (connection) await connection.close();
   }
