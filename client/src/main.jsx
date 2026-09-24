@@ -10,7 +10,7 @@ import Employee from "./Employee";
 import Customer from "./Customer";
 import Login from "./Login";
 import Product from "./Product";
-import ProtectedRoute from "./ProtectedRoute"; // 1. นำเข้า ProtectedRoute
+import ProtectedRoute from "./ProtectedRoute";
 
 const router = createBrowserRouter([
   {
@@ -18,39 +18,40 @@ const router = createBrowserRouter([
     element: <Home />,
   },
   {
+    path: "/login",
+    element: <Login />,
+  },
+  {
+    // สมมติว่าหน้า Employee ของคุณใช้จัดการพนักงาน ซึ่งเทียบเท่ากับ Profile หรือ Dashboard ในตาราง
+    // คุณก็เลือกรหัสที่ตรงกันมาใส่ (ตัวอย่างนี้ขอสมมติเป็น S04 - Profile)
     path: "/employee",
     element: (
-      // 2. ครอบด้วย ProtectedRoute และระบุสิทธิ์ตำแหน่งที่ 0 (Employee)
-      <ProtectedRoute requiredPermIndex={0}>
+      <ProtectedRoute requiredScreenCode="S04">
         <Employee />
       </ProtectedRoute>
     ),
   },
   {
+    // สมมติว่าหน้า Customer คือหน้าเกี่ยวกับการจอง
     path: "/customer",
     element: (
-      // 3. ครอบด้วย ProtectedRoute และระบุสิทธิ์ตำแหน่งที่ 1 (Customer)
-      <ProtectedRoute requiredPermIndex={1}>
+      <ProtectedRoute requiredScreenCode="S02">
         <Customer />
       </ProtectedRoute>
     ),
   },
   {
-    path: "/login",
-    element: <Login />,
-  },
-  {
-    // 4. (Optional) ดักจับ URL ที่ไม่มีอยู่จริง ให้เด้งไปหน้า /login
-    path: "*",
-    element: <Navigate to="/login" replace />,
-  },
-  {
+    // สมมติว่าหน้า Product คือหน้าเกี่ยวกับเส้นทาง
     path: "/product",
     element: (
-      <ProtectedRoute requiredPermIndex={2}>
+      <ProtectedRoute requiredScreenCode="S03">
         <Product />
       </ProtectedRoute>
     ),
+  },
+  {
+    path: "*",
+    element: <Navigate to="/login" replace />,
   },
 ]);
 
