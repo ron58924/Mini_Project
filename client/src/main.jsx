@@ -18,37 +18,40 @@ const router = createBrowserRouter([
     element: <Home />,
   },
   {
+    path: "/login",
+    element: <Login />,
+  },
+  {
+    // สมมติว่าหน้า Employee ของคุณใช้จัดการพนักงาน ซึ่งเทียบเท่ากับ Profile หรือ Dashboard ในตาราง
+    // คุณก็เลือกรหัสที่ตรงกันมาใส่ (ตัวอย่างนี้ขอสมมติเป็น S04 - Profile)
     path: "/employee",
     element: (
-      // เปลี่ยนจาก requiredPermIndex={0} เป็น requiredScreenCode
-      <ProtectedRoute requiredScreenCode="SCR_EMP">
+      <ProtectedRoute requiredScreenCode="S04">
         <Employee />
       </ProtectedRoute>
     ),
   },
   {
+    // สมมติว่าหน้า Customer คือหน้าเกี่ยวกับการจอง
     path: "/customer",
     element: (
-      <ProtectedRoute requiredScreenCode="SCR_CUS">
+      <ProtectedRoute requiredScreenCode="S02">
         <Customer />
       </ProtectedRoute>
     ),
   },
   {
-    path: "/login",
-    element: <Login />,
+    // สมมติว่าหน้า Product คือหน้าเกี่ยวกับเส้นทาง
+    path: "/product",
+    element: (
+      <ProtectedRoute requiredScreenCode="S03">
+        <Product />
+      </ProtectedRoute>
+    ),
   },
   {
     path: "*",
     element: <Navigate to="/login" replace />,
-  },
-  {
-    path: "/product",
-    element: (
-      <ProtectedRoute requiredScreenCode="SCR_PROD">
-        <Product />
-      </ProtectedRoute>
-    ),
   },
 ]);
 
