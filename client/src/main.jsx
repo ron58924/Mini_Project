@@ -9,8 +9,9 @@ import Home from "./Home";
 import Employee from "./Employee";
 import Customer from "./Customer";
 import Login from "./Login";
+import Register from "./Register";
 import Product from "./Product";
-import ProtectedRoute from "./ProtectedRoute"; // 1. นำเข้า ProtectedRoute
+import ProtectedRoute from "./ProtectedRoute";
 
 const router = createBrowserRouter([
   {
@@ -18,9 +19,16 @@ const router = createBrowserRouter([
     element: <Home />,
   },
   {
+    path: "/login",
+    element: <Login />,
+  },
+  {
+    path: "/register",
+    element: <Register />,
+  },
+  {
     path: "/employee",
     element: (
-      // 2. ครอบด้วย ProtectedRoute และระบุสิทธิ์ตำแหน่งที่ 0 (Employee)
       <ProtectedRoute requiredPermIndex={0}>
         <Employee />
       </ProtectedRoute>
@@ -29,20 +37,10 @@ const router = createBrowserRouter([
   {
     path: "/customer",
     element: (
-      // 3. ครอบด้วย ProtectedRoute และระบุสิทธิ์ตำแหน่งที่ 1 (Customer)
       <ProtectedRoute requiredPermIndex={1}>
         <Customer />
       </ProtectedRoute>
     ),
-  },
-  {
-    path: "/login",
-    element: <Login />,
-  },
-  {
-    // 4. (Optional) ดักจับ URL ที่ไม่มีอยู่จริง ให้เด้งไปหน้า /login
-    path: "*",
-    element: <Navigate to="/login" replace />,
   },
   {
     path: "/product",
@@ -52,10 +50,18 @@ const router = createBrowserRouter([
       </ProtectedRoute>
     ),
   },
+  {
+    path: "*",
+    element: <Navigate to="/login" replace />,
+  },
 ]);
 
-ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <RouterProvider router={router} />
-  </React.StrictMode>,
-);
+const rootElement = document.getElementById("root");
+
+if (rootElement) {
+  ReactDOM.createRoot(rootElement).render(
+    <React.StrictMode>
+      <RouterProvider router={router} />
+    </React.StrictMode>
+  );
+}
