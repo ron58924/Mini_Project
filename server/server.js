@@ -54,14 +54,15 @@ async function generateEmpId(connection) {
 app.post("/api/login", async (req, res) => {
   let connection;
   try {
-    const { empemail, emppassword } = req.body;
+    const { email, password } = req.body;
     connection = await getConnection();
 
+    // 1. ดึงข้อมูลผู้ใช้จากตาราง users ใหม่
     const result = await connection.execute(
-      `SELECT EMPID, EMPNAME, EMPEMAIL, EMPPASSWORD, PERMISSION
-       FROM MUTEMP
-       WHERE EMPEMAIL = :empemail`,
-      { empemail },
+      `SELECT user_code, first_name, last_name, email, password, role_code
+       FROM users
+       WHERE email = :email`,
+      { email }
     );
 
     if (result.rows.length === 0) {
@@ -69,19 +70,35 @@ app.post("/api/login", async (req, res) => {
     }
 
     const row = result.rows[0];
-    const isMatch = await bcrypt.compare(emppassword, row[3]);
+    //const isMatch = await bcrypt.compare(password, row[4]);
+    const isMatch = (password === row[4]);
 
     if (!isMatch) {
       return res.status(401).json({ message: "อีเมลหรือรหัสผ่านไม่ถูกต้อง" });
     }
 
+    // 2. ดึงสิทธิ์หน้าจอจาก role_permissions
+    const roleCode = row[5];
+    let allowedScreens = [];
+
+    if (roleCode) {
+      const permResult = await connection.execute(
+        `SELECT screen_code FROM role_permissions WHERE role_code = :roleCode`,
+        { roleCode: roleCode }
+      );
+      // แปลงผลลัพธ์เป็น Array ธรรมดา เช่น ['SCR_EMP', 'SCR_PROD']
+      allowedScreens = permResult.rows.map(r => r[0]);
+    }
+
+    // 3. ส่งข้อมูลกลับให้ Frontend (พร้อม allowedScreens)
     res.json({
       message: "Login successful",
       user: {
-        empId: row[0],
-        empname: row[1],
-        empemail: row[2],
-        permission: row[4] || "0000",
+        user_code: row[0],
+        first_name: row[1],
+        email: row[3],
+        role_code: roleCode,
+        allowedScreens: allowedScreens 
       },
     });
   } catch (error) {
@@ -93,32 +110,32 @@ app.post("/api/login", async (req, res) => {
 });
 
 // =====================================================
-// GET ALL EMPLOYEES
+// GET ALL USERS (ดึงข้อมูลผู้ใช้งานทั้งหมด)
 // =====================================================
-app.get("/api/mutemp", async (req, res) => {
+app.get("/api/USERS", async (req, res) => {
   let connection;
   try {
     connection = await getConnection();
     const result = await connection.execute(
-      `SELECT EMPID, EMPNAME, EMPADDRESS, EMPEMAIL, SALARY, PERMISSION
-      FROM MUTEMP
-      ORDER BY EMPID`,
+      `SELECT user_code, first_name, last_name, email, role_code, dept_code 
+       FROM users 
+       ORDER BY user_code`
     );
-    const employees = result.rows.map((row) => ({
-      empId: row[0],
-      empname: row[1],
-      empaddress: row[2],
-      empemail: row[3],
-      salary: row[4],
-      permission: row[5] || "0000",
+    
+    // แปลงข้อมูลจาก Array เป็น Object เพื่อให้ Frontend นำไปใช้ง่ายๆ
+    const users = result.rows.map((row) => ({
+      user_code: row[0],
+      first_name: row[1],
+      last_name: row[2],
+      email: row[3],
+      role_code: row[4],
+      dept_code: row[5]
     }));
 
-    res.json(employees);
+    res.json(users);
   } catch (error) {
     console.error(error);
-    res
-      .status(500)
-      .json({ message: "Cannot get employees", error: error.message });
+    res.status(500).json({ message: "Cannot get users", error: error.message });
   } finally {
     if (connection) await connection.close();
   }

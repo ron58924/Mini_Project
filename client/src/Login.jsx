@@ -11,12 +11,13 @@ function Login() {
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
+      // เปลี่ยน Key เป็น email และ password ตามตาราง users ใหม่
       const response = await axios.post("http://localhost:5000/api/login", {
-        empemail: email,
-        emppassword: password,
+        email: email,
+        password: password,
       });
 
-      // บันทึกข้อมูล Session ลง LocalStorage
+      // บันทึกข้อมูล Session (ซึ่งตอนนี้จะมี allowedScreens แนบมาด้วย) ลง LocalStorage
       localStorage.setItem("user", JSON.stringify(response.data.user));
 
       await Swal.fire({
@@ -26,7 +27,6 @@ function Login() {
         showConfirmButton: false,
       });
 
-      // นำทางไปหน้าแรก
       navigate("/");
       window.location.reload();
     } catch (error) {

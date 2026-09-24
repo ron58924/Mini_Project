@@ -10,7 +10,7 @@ import Employee from "./Employee";
 import Customer from "./Customer";
 import Login from "./Login";
 import Product from "./Product";
-import ProtectedRoute from "./ProtectedRoute"; // 1. นำเข้า ProtectedRoute
+import ProtectedRoute from "./ProtectedRoute";
 
 const router = createBrowserRouter([
   {
@@ -20,8 +20,8 @@ const router = createBrowserRouter([
   {
     path: "/employee",
     element: (
-      // 2. ครอบด้วย ProtectedRoute และระบุสิทธิ์ตำแหน่งที่ 0 (Employee)
-      <ProtectedRoute requiredPermIndex={0}>
+      // เปลี่ยนจาก requiredPermIndex={0} เป็น requiredScreenCode
+      <ProtectedRoute requiredScreenCode="SCR_EMP">
         <Employee />
       </ProtectedRoute>
     ),
@@ -29,8 +29,7 @@ const router = createBrowserRouter([
   {
     path: "/customer",
     element: (
-      // 3. ครอบด้วย ProtectedRoute และระบุสิทธิ์ตำแหน่งที่ 1 (Customer)
-      <ProtectedRoute requiredPermIndex={1}>
+      <ProtectedRoute requiredScreenCode="SCR_CUS">
         <Customer />
       </ProtectedRoute>
     ),
@@ -40,14 +39,13 @@ const router = createBrowserRouter([
     element: <Login />,
   },
   {
-    // 4. (Optional) ดักจับ URL ที่ไม่มีอยู่จริง ให้เด้งไปหน้า /login
     path: "*",
     element: <Navigate to="/login" replace />,
   },
   {
     path: "/product",
     element: (
-      <ProtectedRoute requiredPermIndex={2}>
+      <ProtectedRoute requiredScreenCode="SCR_PROD">
         <Product />
       </ProtectedRoute>
     ),
