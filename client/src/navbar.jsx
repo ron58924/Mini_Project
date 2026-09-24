@@ -14,6 +14,7 @@ function Navbar() {
   const canAccessCus = allowedScreens.includes("S02"); 
   const canAccessProd = allowedScreens.includes("S03"); 
   const canAccessReport = allowedScreens.includes("S01"); // สมมติให้ S01 คือ Report
+  const canAccessPermission = allowedScreens.includes("S05"); // สมมติให้ S05 คือ Permission - แก้ให้ตรงกับ screens table จริง
 
   const handleLogout = () => {
     localStorage.removeItem("user");
@@ -61,6 +62,14 @@ function Navbar() {
             <li className="nav-item">
               <Link className="nav-link" to="/report">
                 Report
+              </Link>
+            </li>
+          )}
+
+          {canAccessPermission && (
+            <li className="nav-item">
+              <Link className="nav-link" to="/permission">
+                Permission
               </Link>
             </li>
           )}

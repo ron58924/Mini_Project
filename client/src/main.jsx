@@ -10,6 +10,7 @@ import Employee from "./Employee";
 import Customer from "./Customer";
 import Login from "./Login";
 import Product from "./Product";
+import Permission from "./Permission";
 import ProtectedRoute from "./ProtectedRoute";
 
 const router = createBrowserRouter([
@@ -46,6 +47,15 @@ const router = createBrowserRouter([
     element: (
       <ProtectedRoute requiredScreenCode="S03">
         <Product />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // หน้าจัดการสิทธิ์ (Permission) - ปรับ requiredScreenCode ให้ตรงกับรหัสจริงใน screens table
+    path: "/permission",
+    element: (
+      <ProtectedRoute requiredScreenCode="S05">
+        <Permission />
       </ProtectedRoute>
     ),
   },
