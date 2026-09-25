@@ -167,7 +167,7 @@ app.get("/api/users", async (req, res) => {
 });
 
 // =====================================================
-// GET ROLES FOR DROPDOWN (ไม่เอา Passenger)
+// GET ROLES FOR DROPDOWN
 // =====================================================
 app.get("/api/roles", async (req, res) => {
   let connection;
