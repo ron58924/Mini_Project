@@ -13,6 +13,7 @@ import Register from "./Register";
 import Product from "./Product";
 import Permission from "./Permission";
 import ProtectedRoute from "./ProtectedRoute";
+import Report from "./Report"; 
 
 const router = createBrowserRouter([
   {
@@ -62,6 +63,15 @@ const router = createBrowserRouter([
     element: (
       <ProtectedRoute requiredScreenCode="S05">
         <Permission />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // หน้าจัดการสิทธิ์ (Permission) - ปรับ requiredScreenCode ให้ตรงกับรหัสจริงใน screens table
+    path: "/report",
+    element: (
+      <ProtectedRoute requiredScreenCode="S06">
+        <Report />
       </ProtectedRoute>
     ),
   },

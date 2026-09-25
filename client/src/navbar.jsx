@@ -14,9 +14,8 @@ function Navbar() {
   const canAccessPas = allowedScreens.includes("S02"); 
   const canAccessProd = allowedScreens.includes("S03"); 
   const canAccessReport = allowedScreens.includes("S01");
-  // เพิ่มบรรทัดนี้เข้ามา เพื่อเช็คสิทธิ์หน้า Permission
   const canAccessPermission = allowedScreens.includes("S05");
-
+  const canAccessReportPage = allowedScreens.includes("S06");
   const handleLogout = () => {
     localStorage.removeItem("user");
     navigate("/login");
@@ -61,7 +60,7 @@ function Navbar() {
             </li>
           )}
           
-          {canAccessReport && (
+          {canAccessReportPage && (
             <li className="nav-item">
               <Link className="nav-link" to="/report">
                 Report

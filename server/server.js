@@ -691,3 +691,47 @@ app.put("/api/role-permissions/:roleCode", async (req, res) => {
     if (connection) await connection.close();
   }
 });
+
+// ==========================================
+// API: ดึงรายงานพฤติกรรมผู้ใช้งาน (Report)
+// ==========================================
+app.get("/api/reports/user-behavior", async (req, res) => {
+  const { startDate, endDate } = req.query;
+  let connection;
+
+  try {
+    connection = await getConnection();
+    
+    const query = `
+      SELECT 
+        u.first_name || ' ' || u.last_name AS user_name,
+        COUNT(b.booking_code) AS total_bookings,
+        SUM(CASE WHEN UPPER(b.status) = 'COMPLETED' THEN 1 ELSE 0 END) AS boarded,
+        SUM(CASE WHEN UPPER(b.status) = 'CANCELLED' THEN 1 ELSE 0 END) AS canceled,
+        SUM(CASE WHEN UPPER(b.status) = 'NO_SHOW' THEN 1 ELSE 0 END) AS no_show
+      FROM bookings b
+      JOIN users u ON b.user_code = u.user_code
+      /* ใช้คอลัมน์ travel_date ที่สร้างใหม่ในการกรองวันที่ */
+      WHERE b.travel_date BETWEEN TO_DATE(:startDate, 'YYYY-MM-DD') AND TO_DATE(:endDate, 'YYYY-MM-DD')
+      GROUP BY u.first_name, u.last_name
+      ORDER BY total_bookings DESC
+    `;
+
+    const result = await connection.execute(query, { startDate, endDate });
+
+    const reportData = result.rows.map((row) => ({
+      user_name: row[0],
+      total: row[1] || 0,
+      boarded: row[2] || 0,
+      canceled: row[3] || 0,
+      no_show: row[4] || 0,
+    }));
+
+    res.json(reportData);
+  } catch (error) {
+    console.error("Error generating report:", error);
+    res.status(500).json({ message: "Cannot generate report", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
