@@ -10,12 +10,10 @@ function Navbar() {
   const allowedScreens = user?.allowedScreens || [];
 
   // 2. เช็คสิทธิ์ตาม SCREEN_CODE
-  const canAccessEmp = allowedScreens.includes("S04"); 
+  const canAccessEmp = allowedScreens.includes("S01"); 
   const canAccessPas = allowedScreens.includes("S02"); 
-  const canAccessProd = allowedScreens.includes("S03"); 
-  const canAccessReport = allowedScreens.includes("S01");
-  const canAccessPermission = allowedScreens.includes("S05");
-  const canAccessReportPage = allowedScreens.includes("S06");
+  const canAccessPermission = allowedScreens.includes("S03");
+  const canAccessReportPage = allowedScreens.includes("S04");
   const handleLogout = () => {
     localStorage.removeItem("user");
     navigate("/login");
@@ -51,15 +49,7 @@ function Navbar() {
               </Link>
             </li>
           )}
-          
-          {canAccessProd && (
-            <li className="nav-item">
-              <Link className="nav-link" to="/product">
-                Product
-              </Link>
-            </li>
-          )}
-          
+            
           {canAccessReportPage && (
             <li className="nav-item">
               <Link className="nav-link" to="/report">

@@ -10,7 +10,6 @@ import Employee from "./Employee";
 import Passenger from "./Passenger";
 import Login from "./Login";
 import Register from "./Register";
-import Product from "./Product";
 import Permission from "./Permission";
 import ProtectedRoute from "./ProtectedRoute";
 import Report from "./Report"; 
@@ -34,7 +33,7 @@ const router = createBrowserRouter([
     // คุณก็เลือกรหัสที่ตรงกันมาใส่ (ตัวอย่างนี้ขอสมมติเป็น S04 - Profile)
     path: "/employee",
     element: (
-      <ProtectedRoute requiredScreenCode="S04">
+      <ProtectedRoute requiredScreenCode="S01">
         <Employee />
       </ProtectedRoute>
     ),
@@ -48,20 +47,11 @@ const router = createBrowserRouter([
       </ProtectedRoute>
     ),
   },
-  
-  {
-    path: "/product",
-    element: (
-      <ProtectedRoute requiredScreenCode="S03">
-        <Product />
-      </ProtectedRoute>
-    ),
-  },
   {
     // หน้าจัดการสิทธิ์ (Permission) - ปรับ requiredScreenCode ให้ตรงกับรหัสจริงใน screens table
     path: "/permission",
     element: (
-      <ProtectedRoute requiredScreenCode="S05">
+      <ProtectedRoute requiredScreenCode="S03">
         <Permission />
       </ProtectedRoute>
     ),
@@ -70,7 +60,7 @@ const router = createBrowserRouter([
     // หน้าจัดการสิทธิ์ (Permission) - ปรับ requiredScreenCode ให้ตรงกับรหัสจริงใน screens table
     path: "/report",
     element: (
-      <ProtectedRoute requiredScreenCode="S06">
+      <ProtectedRoute requiredScreenCode="S04">
         <Report />
       </ProtectedRoute>
     ),
