@@ -1,32 +1,70 @@
+@import url("https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap");
+
+/* ================= MUT Shuttle Bus theme (matches Login.css / Permission.css) ================= */
 .navbar {
-  background-color: #ab0cf5;
+  font-family: "Prompt", sans-serif;
+}
 
-  color: #fff;
+/* Override Bootstrap's bg-primary with the brand red gradient */
+.navbar.bg-primary {
+  background: linear-gradient(150deg, #d32f2f 0%, #9a0007 100%) !important;
+  box-shadow: 0 4px 16px rgba(154, 0, 7, 0.25);
+}
+
+.navbar-brand {
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.navbar-brand-stacked {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 20px;
+  flex-direction: column;
+  line-height: 1.1;
 }
 
-.logo {
-  font-size: 1.5rem;
+.navbar-brand-mut,
+.navbar-brand-sub {
+  font-weight: 700;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
 }
 
-.nav-links {
-  list-style: none;
-  display: flex;
+.navbar-brand-mut {
+  font-size: 1.4rem;
+  letter-spacing: 0.5px;
 }
 
-.nav-links li {
-  margin-right: 20px;
+.navbar-brand-sub {
+  font-size: 0.95rem;
 }
 
-.nav-links li a {
-  color: #fff;
-  text-decoration: none;
-  transition: color 0.3s ease;
+.navbar .nav-link {
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.88) !important;
+  transition: color 0.2s ease;
 }
 
-.nav-links li a:hover {
-  color: #f0f0f0;
+.navbar .nav-link:hover {
+  color: #ffffff !important;
+}
+
+/* Login button (when logged out) matches the login submit button */
+.navbar .btn-primary {
+  background: linear-gradient(180deg, #e53935 0%, #b71c1c 100%);
+  border: none;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.navbar .btn-primary:hover {
+  opacity: 0.94;
+}
+
+/* Logout button */
+.navbar .btn-outline-light {
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.navbar .btn-outline-light:hover {
+  background-color: rgba(255, 255, 255, 0.15);
 }
