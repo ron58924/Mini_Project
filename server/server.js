@@ -524,6 +524,33 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
+
+// =====================================================
+// GET FACULTIES FOR REGISTER DROPDOWN
+// =====================================================
+app.get("/api/faculties", async (req, res) => {
+  let connection;
+  try {
+    connection = await getConnection();
+    // ค้นหาเฉพาะชื่อที่ขึ้นต้นด้วยคำว่า Faculty
+    const result = await connection.execute(
+      `SELECT dept_code, dept_name 
+       FROM departments 
+       WHERE dept_name LIKE 'Faculty%' 
+       ORDER BY dept_code`
+    );
+    const faculties = result.rows.map((row) => ({
+      dept_code: row[0],
+      dept_name: row[1],
+    }));
+    res.json(faculties);
+  } catch (error) {
+    res.status(500).json({ message: "Cannot get faculties", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
 // =====================================================
 // GET ALL ROLES
 // =====================================================

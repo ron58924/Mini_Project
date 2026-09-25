@@ -1,11 +1,21 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import axios from "axios";
 import Swal from "sweetalert2";
 import { useNavigate } from "react-router-dom";
 import "./Register.css";
 
-// ==========================================
-// SVG Icons Components
-// ==========================================
+// ชุดคำแปลชื่อคณะ (อ้างอิงจากข้อมูลใน Database)
+const facultyTranslations = {
+  "Faculty of Engineering": "คณะวิศวกรรมศาสตร์",
+  "Faculty of Business Administration": "คณะบริหารธุรกิจ",
+  "Faculty of Veterinary Medicine": "คณะสัตวแพทยศาสตร์",
+  "Faculty of Information Science and Technology": "คณะวิทยาการคอมพิวเตอร์และเทคโนโลยีสารสนเทศ",
+  "General Administration": "กองกลางและธุรการ",
+  "Security Department": "ฝ่ายรักษาความปลอดภัย",
+  "Facility and Transportation": "ฝ่ายอาคารสถานที่และยานพาหนะ",
+  "IT Center": "ศูนย์เทคโนโลยีสารสนเทศ"
+};
+
 function EyeIcon({ open }) {
   return open ? (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -41,35 +51,21 @@ function PhoneIcon() {
   );
 }
 
-function BackArrowIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M19 12H5M12 19l-7-7 7-7"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-// ==========================================
-// Main Register Component
-// ==========================================
 function Register() {
   const navigate = useNavigate();
 
   // State สำหรับเก็บข้อมูลในฟอร์ม
-  const [name, setName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [acceptTerms, setAcceptTerms] = useState(false);
+  const [deptCode, setDeptCode] = useState("");
+  const [deptOptions, setDeptOptions] = useState([]);
 
-  // State ควบคุม UI และ Validate[cite: 3]
+  // State ควบคุม UI และ Validate
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState({});
@@ -77,18 +73,60 @@ function Register() {
 
   const goToLogin = () => navigate("/login");
 
-  // ==========================================
-  // ฟังก์ชันสมัครสมาชิก (LocalStorage)
-  // ==========================================
+  // ดึงข้อมูลคณะจาก Database
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      try {
+        const response = await axios.get("http://localhost:5000/api/faculties");
+        setDeptOptions(response.data);
+      } catch (error) {
+        console.error("Error fetching departments:", error);
+      }
+    };
+    fetchDepartments();
+  }, []);
+
   const handleRegister = async (e) => {
     e.preventDefault();
 
     const newErrors = {};
+    const englishOnlyRegex = /^[A-Za-z\s]+$/;
 
-    if (!name.trim()) newErrors.name = "กรุณากรอกชื่อ - นามสกุล";
-    if (!email.trim()) newErrors.email = "กรุณากรอกอีเมล";
-    if (!phone.trim()) newErrors.phone = "กรุณากรอกเบอร์โทรศัพท์";
+    // ตรวจสอบชื่อ (เฉพาะภาษาอังกฤษ)
+    if (!firstName.trim()) {
+      newErrors.firstName = "กรุณากรอกชื่อ";
+    } else if (!englishOnlyRegex.test(firstName)) {
+      newErrors.firstName = "กรุณากรอกเป็นภาษาอังกฤษเท่านั้น";
+    }
 
+    // ตรวจสอบนามสกุล (เฉพาะภาษาอังกฤษ)
+    if (!lastName.trim()) {
+      newErrors.lastName = "กรุณากรอกนามสกุล";
+    } else if (!englishOnlyRegex.test(lastName)) {
+      newErrors.lastName = "กรุณากรอกเป็นภาษาอังกฤษเท่านั้น";
+    }
+
+    // ตรวจสอบอีเมล (ต้องเป็น @mut.ac.th)
+    if (!email.trim()) {
+      newErrors.email = "กรุณากรอกอีเมล";
+    } else if (!email.endsWith("@mut.ac.th")) {
+      newErrors.email = "กรุณาใช้อีเมล @mut.ac.th เท่านั้น";
+    }
+
+    // ตรวจสอบเบอร์โทรศัพท์ (ตัวเลข 10 หลัก)
+    const phoneRegex = /^[0-9]+$/;
+    if (!phone.trim()) {
+      newErrors.phone = "กรุณากรอกเบอร์โทรศัพท์";
+    } else if (!phoneRegex.test(phone)) {
+      newErrors.phone = "กรุณากรอกเฉพาะตัวเลขเท่านั้น";
+    } else if (phone.length !== 10) {
+      newErrors.phone = "กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลัก";
+    }
+
+    // ตรวจสอบคณะ
+    if (!deptCode) newErrors.deptCode = "กรุณาเลือกคณะ";
+
+    // ตรวจสอบรหัสผ่าน
     if (!password) {
       newErrors.password = "กรุณากรอกรหัสผ่าน";
     } else if (password.length < 8) {
@@ -101,6 +139,7 @@ function Register() {
       newErrors.confirmPassword = "รหัสผ่านไม่ตรงกัน";
     }
 
+    // ตรวจสอบเงื่อนไข
     if (!acceptTerms) {
       newErrors.acceptTerms = "กรุณายอมรับเงื่อนไขการใช้งาน";
     }
@@ -110,52 +149,47 @@ function Register() {
 
     setSubmitting(true);
 
-    // อ่านข้อมูลผู้ใช้เก่าจาก LocalStorage[cite: 3]
-    const oldUsers = JSON.parse(localStorage.getItem("users")) || [];
+    try {
+      const usernameAuto = email.split("@")[0]; // ดึงชื่อจากหน้า @ มาเป็น username
 
-    // ตรวจสอบอีเมลซ้ำ[cite: 3]
-    const duplicateUser = oldUsers.find(
-      (user) => user.email.toLowerCase() === email.toLowerCase()
-    );
+      await axios.post("http://localhost:5000/api/users", {
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        email: email,
+        username: usernameAuto,
+        password: password,
+        role_code: "R03",
+        dept_code: deptCode
+      });
 
-    if (duplicateUser) {
-      setErrors({ email: "อีเมลนี้มีบัญชีในระบบอยู่แล้ว" });
+      await Swal.fire({
+        icon: "success",
+        title: "สมัครสมาชิกสำเร็จ!",
+        text: "คุณสามารถเข้าสู่ระบบด้วยอีเมลนี้ได้ทันที",
+        timer: 2000,
+        showConfirmButton: false,
+      });
+
+      navigate("/login");
+    } catch (error) {
+      Swal.fire({
+        icon: "error",
+        title: "เกิดข้อผิดพลาด",
+        text: error.response?.data?.message || "ไม่สามารถสมัครสมาชิกได้ อีเมลนี้อาจมีในระบบแล้ว"
+      });
+    } finally {
       setSubmitting(false);
-      return;
     }
-
-    // บันทึกผู้ใช้ใหม่ลง LocalStorage[cite: 3]
-    const newUser = { name, email, phone, password };
-    oldUsers.push(newUser);
-    localStorage.setItem("users", JSON.stringify(oldUsers));
-
-    setSubmitting(false);
-
-    // แสดง Pop-up แจ้งเตือนเมื่อสมัครสำเร็จ
-    await Swal.fire({
-      icon: "success",
-      title: "สมัครสมาชิกสำเร็จ!",
-      text: "คุณสามารถเข้าสู่ระบบด้วยอีเมลนี้ได้ทันที",
-      timer: 2000,
-      showConfirmButton: false,
-    });
-
-    navigate("/login");
   };
 
   return (
     <main className="register-page">
       <section className="register-card">
-        
-          
+        <div className="support-text">
+          <PhoneIcon />
+          <span>ศูนย์ควบคุมยานพาหนะ: 02-988-3655 ต่อ 1102</span>
+        </div>
 
-          <div className="support-text">
-            <PhoneIcon />
-            <span>ศูนย์ควบคุมยานพาหนะ: 02-988-3655 ต่อ 1102</span>
-          </div>
-        
-
-        {/* ================= ฝั่งขวา Form Area ================= */}
         <div className="register-form-area">
           <header className="register-header">
             <h2>สมัครสมาชิกใหม่ (Register)</h2>
@@ -163,21 +197,40 @@ function Register() {
           </header>
 
           <form className="register-form" onSubmit={handleRegister} noValidate>
+            
             {/* ชื่อ - นามสกุล */}
-            <div className="field field-full">
-              <label>
-                ชื่อ - นามสกุล <span>*</span>
-              </label>
-              <input
-                type="text"
-                placeholder="เช่น สมชาย ใจดี"
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  if (errors.name) setErrors((prev) => ({ ...prev, name: null }));
-                }}
-              />
-              {errors.name && <p className="field-error">{errors.name}</p>}
+            <div className="field-row">
+              <div className="field">
+                <label>
+                  ชื่อ (First Name) <span>*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="เช่น Somchai"
+                  value={firstName}
+                  onChange={(e) => {
+                    setFirstName(e.target.value);
+                    if (errors.firstName) setErrors((prev) => ({ ...prev, firstName: null }));
+                  }}
+                />
+                {errors.firstName && <p className="field-error">{errors.firstName}</p>}
+              </div>
+
+              <div className="field">
+                <label>
+                  นามสกุล (Last Name) <span>*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="เช่น Jaidee"
+                  value={lastName}
+                  onChange={(e) => {
+                    setLastName(e.target.value);
+                    if (errors.lastName) setErrors((prev) => ({ ...prev, lastName: null }));
+                  }}
+                />
+                {errors.lastName && <p className="field-error">{errors.lastName}</p>}
+              </div>
             </div>
 
             {/* Email + Phone */}
@@ -204,15 +257,44 @@ function Register() {
                 </label>
                 <input
                   type="tel"
-                  placeholder="08x-xxx-xxxx"
+                  placeholder="08xxxxxxxx"
+                  maxLength={10}
                   value={phone}
                   onChange={(e) => {
-                    setPhone(e.target.value);
+                    const onlyNums = e.target.value.replace(/[^0-9]/g, "");
+                    setPhone(onlyNums);
                     if (errors.phone) setErrors((prev) => ({ ...prev, phone: null }));
                   }}
                 />
                 {errors.phone && <p className="field-error">{errors.phone}</p>}
               </div>
+            </div>
+
+            {/* Dropdown เลือกคณะ */}
+            <div className="field field-full">
+              <label>
+                คณะ (Faculty) <span>*</span>
+              </label>
+              <select
+                className="form-select" 
+                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc", outline: "none", fontSize: "14px" }}
+                value={deptCode}
+                onChange={(e) => {
+                  setDeptCode(e.target.value);
+                  if (errors.deptCode) setErrors((prev) => ({ ...prev, deptCode: null }));
+                }}
+              >
+                <option value="">-- เลือกคณะของคุณ --</option>
+                {deptOptions.map((dept) => {
+                  const thaiName = facultyTranslations[dept.dept_name] || dept.dept_name;
+                  return (
+                    <option key={dept.dept_code} value={dept.dept_code}>
+                      {thaiName}
+                    </option>
+                  );
+                })}
+              </select>
+              {errors.deptCode && <p className="field-error">{errors.deptCode}</p>}
             </div>
 
             {/* Password + Confirm Password */}
@@ -235,14 +317,11 @@ function Register() {
                     type="button"
                     className="eye-button"
                     onClick={() => setShowPassword((v) => !v)}
-                    aria-label="แสดง/ซ่อนรหัสผ่าน"
                   >
                     <EyeIcon open={showPassword} />
                   </button>
                 </div>
-                {errors.password && (
-                  <p className="field-error">{errors.password}</p>
-                )}
+                {errors.password && <p className="field-error">{errors.password}</p>}
               </div>
 
               <div className="field">
@@ -264,14 +343,11 @@ function Register() {
                     type="button"
                     className="eye-button"
                     onClick={() => setShowConfirmPassword((v) => !v)}
-                    aria-label="แสดง/ซ่อนรหัสผ่าน"
                   >
                     <EyeIcon open={showConfirmPassword} />
                   </button>
                 </div>
-                {errors.confirmPassword && (
-                  <p className="field-error">{errors.confirmPassword}</p>
-                )}
+                {errors.confirmPassword && <p className="field-error">{errors.confirmPassword}</p>}
               </div>
             </div>
 
@@ -289,13 +365,10 @@ function Register() {
                 />
                 <span className="custom-checkbox">{acceptTerms ? "✓" : ""}</span>
                 <span className="agreement-text">
-                  ฉันยอมรับ <strong>เงื่อนไขการใช้งาน</strong> และ{" "}
-                  <strong>นโยบายความเป็นส่วนตัว</strong>
+                  ฉันยอมรับ <strong>เงื่อนไขการใช้งาน</strong> และ <strong>นโยบายความเป็นส่วนตัว</strong>
                 </span>
               </label>
-              {errors.acceptTerms && (
-                <p className="field-error">{errors.acceptTerms}</p>
-              )}
+              {errors.acceptTerms && <p className="field-error">{errors.acceptTerms}</p>}
             </div>
 
             {/* Submit Button */}
@@ -313,7 +386,6 @@ function Register() {
             </button>
           </form>
 
-          {/* Footer */}
           <footer className="register-footer">
             <span>มีบัญชีผู้ใช้งานอยู่แล้ว?</span>
             <button type="button" className="login-link" onClick={goToLogin}>
