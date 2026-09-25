@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import Swal from "sweetalert2";
 import "bootstrap/dist/css/bootstrap.min.css";
+import "./Permission.css";
 import Navbar from "./Navbar";
 
 // =====================================================
@@ -191,7 +192,7 @@ function Permission() {
   return (
     <>
       <Navbar />
-      <div className="container py-4">
+      <div className="permission-page container py-4">
         {/* HEADER */}
         <div className="d-flex justify-content-between align-items-center mb-4">
           <h1 className="fw-bold">Permission Management</h1>

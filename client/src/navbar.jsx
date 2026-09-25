@@ -1,5 +1,6 @@
 import React from "react";
 import { Link, useNavigate } from "react-router-dom"; 
+import "./Navbar.css";
 
 function Navbar() {
   const navigate = useNavigate();
@@ -23,8 +24,9 @@ function Navbar() {
 
   return (
     <nav className="navbar navbar-expand-lg navbar-dark bg-primary px-3">
-      <Link className="navbar-brand" to="/">
-        ตัวอย่างโปรแกรม อ.ใหญ่
+      <Link className="navbar-brand navbar-brand-stacked" to="/">
+        <span className="navbar-brand-mut">MUT</span>
+        <span className="navbar-brand-sub">Shuttle Bus</span>
       </Link>
       <div className="collapse navbar-collapse">
         <ul className="navbar-nav me-auto">
