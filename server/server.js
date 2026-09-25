@@ -173,14 +173,11 @@ app.get("/api/roles", async (req, res) => {
   let connection;
   try {
     connection = await getConnection();
-    // ใช้ LOWER() เพื่อให้เช็คคำว่า passenger ได้ครอบคลุมทั้งตัวเล็กตัวใหญ่
+    // ดึงข้อมูลทั้งหมดเรียงตามรหัส โดยไม่มี WHERE กรองทิ้ง
     const result = await connection.execute(
-      `SELECT role_code, role_name 
-       FROM roles 
-       WHERE LOWER(role_name) NOT LIKE '%passenger%' 
-         AND LOWER(role_name) NOT LIKE '%passanger%'
-       ORDER BY role_code`
+      `SELECT role_code, role_name FROM roles ORDER BY role_code`
     );
+    
     const roles = result.rows.map((row) => ({
       role_code: row[0],
       role_name: row[1],
