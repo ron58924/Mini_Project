@@ -10,7 +10,7 @@ function Navbar() {
 
   // 2. เช็คสิทธิ์ตาม SCREEN_CODE
   const canAccessEmp = allowedScreens.includes("S04"); 
-  const canAccessCus = allowedScreens.includes("S02"); 
+  const canAccessPas = allowedScreens.includes("S02"); 
   const canAccessProd = allowedScreens.includes("S03"); 
   const canAccessReport = allowedScreens.includes("S01");
   // เพิ่มบรรทัดนี้เข้ามา เพื่อเช็คสิทธิ์หน้า Permission
@@ -42,10 +42,11 @@ function Navbar() {
             </li>
           )}
           
-          {canAccessCus && (
+          {/* เปลี่ยนจาก Customers เป็น Passenger */}
+          {canAccessPas && (
             <li className="nav-item">
-              <Link className="nav-link" to="/customer">
-                Customers
+              <Link className="nav-link" to="/passenger">
+                Passenger
               </Link>
             </li>
           )}

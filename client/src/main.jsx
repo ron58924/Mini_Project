@@ -7,7 +7,7 @@ import {
 } from "react-router-dom";
 import Home from "./Home";
 import Employee from "./Employee";
-import Customer from "./Customer";
+import Passenger from "./Passenger";
 import Login from "./Login";
 import Register from "./Register";
 import Product from "./Product";
@@ -38,14 +38,16 @@ const router = createBrowserRouter([
       </ProtectedRoute>
     ),
   },
+
   {
-    path: "/customer",
+    path: "/passenger",
     element: (
       <ProtectedRoute requiredScreenCode="S02">
-        <Customer />
+        <Passenger />
       </ProtectedRoute>
     ),
   },
+  
   {
     path: "/product",
     element: (

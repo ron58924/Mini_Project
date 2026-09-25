@@ -110,24 +110,24 @@ app.post("/api/login", async (req, res) => {
 });
 
 // =====================================================
-// GENERATE USER ID (EMP001, EMP002, ...)
+// GENERATE USER ID (แยก EMP และ PAS)
 // =====================================================
-async function generateUserCode(connection) {
+async function generateUserCode(connection, roleCode) {
+  // ถ้า role_code เป็น R03 ให้ใช้ 'PAS' ถ้าไม่ใช่ให้ใช้ 'EMP'
+  const prefix = (roleCode === 'R03') ? 'PAS' : 'EMP';
+  
   const result = await connection.execute(
-    // เปลี่ยนเงื่อนไขให้ค้นหารหัสที่ขึ้นต้นด้วย 'EMP'
-    `SELECT MAX(user_code) AS MAXID FROM users WHERE user_code LIKE 'EMP%'`
+    `SELECT MAX(user_code) AS MAXID FROM users WHERE user_code LIKE '${prefix}%'`
   );
+  
   let runningNumber = 1;
   if (result.rows[0][0]) {
-    const maxId = result.rows[0][0]; // ตัวอย่างข้อมูลที่ได้มาคือ 'EMP001'
-    
-    // ตัดตัวอักษร 3 ตัวแรก ("EMP") ออก แล้วเอาตัวเลขมาบวก 1
+    const maxId = result.rows[0][0]; 
     const lastNumber = parseInt(maxId.substring(3), 10); 
     runningNumber = lastNumber + 1;
   }
   
-  // คืนค่ารูปแบบใหม่โดยใช้คำว่า EMP นำหน้า
-  return `EMP${String(runningNumber).padStart(3, "0")}`;
+  return `${prefix}${String(runningNumber).padStart(3, "0")}`;
 }
 
 // =====================================================
@@ -215,34 +215,36 @@ app.get("/api/departments", async (req, res) => {
   }
 });
 
+
 // =====================================================
-// CREATE USER
+// CREATE USER (เพิ่มผู้ใช้งาน)
 // =====================================================
 app.post("/api/users", async (req, res) => {
   let connection;
   try {
+    // 1. รับค่าต่างๆ มาจากหน้าเว็บ (มี role_code มาด้วย)
     const { first_name, last_name, email, username, password, role_code, dept_code } = req.body;
-    if (!password || password.trim() === "") {
-      return res.status(400).json({ message: "Password is required" });
-    }
     
     connection = await getConnection();
-    const user_code = await generateUserCode(connection);
+
+    // 2. เรียกใช้ฟังก์ชันสร้างรหัส โดยส่ง role_code เข้าไปด้วย เพื่อให้มันรู้ว่าต้องรัน EMP หรือ PAS
+    const user_code = await generateUserCode(connection, role_code);
+
+    // เข้ารหัสผ่าน
+    const bcrypt = require("bcryptjs");
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // 3. บันทึกลง Database
     await connection.execute(
-      `INSERT INTO users(user_code, first_name, last_name, email, username, password, role_code, dept_code)
-       VALUES(:user_code, :first_name, :last_name, :email, :username, :password, :role_code, :dept_code)`,
-      {
-        user_code, first_name, last_name, email, username,
-        password: hashedPassword, role_code, dept_code
-      },
+      `INSERT INTO users (user_code, first_name, last_name, email, username, password, role_code, dept_code)
+       VALUES (:1, :2, :3, :4, :5, :6, :7, :8)`,
+      [user_code, first_name, last_name, email, username, hashedPassword, role_code, dept_code || null],
       { autoCommit: true }
     );
-
+    
     res.status(201).json({ message: "User created successfully", user_code });
   } catch (error) {
-    res.status(500).json({ message: "Cannot create user", error: error.message });
+    res.status(500).json({ message: "Error creating user", error: error.message });
   } finally {
     if (connection) await connection.close();
   }
