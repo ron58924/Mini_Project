@@ -103,17 +103,32 @@ function Permission() {
     }
   };
 
+  // ==========================================
+  // CRUD: สร้าง (Create) - อัปเดตให้รันรหัสอัตโนมัติ
+  // ==========================================
   const handleAddRole = async () => {
-    const { value: formValues } = await Swal.fire({
+    // 1. หาเลขรหัส Role ปัจจุบันที่เยอะที่สุด แล้วบวก 1
+    let nextCode = "R01";
+    if (roles.length > 0) {
+      const numericCodes = roles
+        .map((r) => parseInt(r.role_code.replace(/\D/g, ""), 10)) // ตัดตัวอักษรออกเหลือแค่เลข (เช่น "R04" -> 4)
+        .filter((n) => !isNaN(n));
+      
+      if (numericCodes.length > 0) {
+        const maxCode = Math.max(...numericCodes);
+        nextCode = `R${(maxCode + 1).toString().padStart(2, "0")}`; // ประกอบกลับเป็นรูปแบบ Rxx (เช่น R05)
+      }
+    }
+
+    const { value: roleName } = await Swal.fire({
       title: "เพิ่มกลุ่มผู้ใช้งาน (Add Role)",
       html: `
-        <div class="text-start mb-2">
-          <label class="form-label">รหัส Role (เช่น R04)</label>
-          <input id="swal-role-code" class="form-control" placeholder="Role Code">
+        <div class="text-start mb-3">
+          <label class="form-label text-muted d-block">รหัสระบบจะสร้างให้: <strong class="text-primary">${nextCode}</strong></label>
         </div>
         <div class="text-start">
-          <label class="form-label">ชื่อ Role (เช่น Manager)</label>
-          <input id="swal-role-name" class="form-control" placeholder="Role Name">
+          <label class="form-label fw-bold">ชื่อ Role (เช่น Manager, Support)</label>
+          <input id="swal-role-name" class="form-control" placeholder="พิมพ์ชื่อกลุ่มผู้ใช้งาน...">
         </div>
       `,
       focusConfirm: false,
@@ -122,24 +137,86 @@ function Permission() {
       confirmButtonText: "บันทึกข้อมูล",
       cancelButtonText: "ยกเลิก",
       preConfirm: () => {
-        const code = document.getElementById("swal-role-code").value.trim();
         const name = document.getElementById("swal-role-name").value.trim();
-        if (!code || !name) {
-          Swal.showValidationMessage("กรุณากรอกข้อมูลให้ครบทั้ง 2 ช่อง");
+        if (!name) {
+          Swal.showValidationMessage("กรุณากรอกชื่อ Role");
         }
-        return { role_code: code, role_name: name };
+        return name;
       },
     });
 
-    if (formValues) {
+    if (roleName) {
       try {
-        await axios.post(`${API_URL}/roles`, formValues);
-        Swal.fire({ icon: "success", title: "สำเร็จ", text: "เพิ่ม Role ใหม่เรียบร้อยแล้ว", timer: 1500, showConfirmButton: false });
+        await axios.post(`${API_URL}/roles`, { role_code: nextCode, role_name: roleName });
+        Swal.fire({ icon: "success", title: "สำเร็จ", text: `เพิ่มสิทธิ์ ${roleName} (${nextCode}) เรียบร้อยแล้ว`, timer: 1500, showConfirmButton: false });
         
         await fetchRoles(); 
-        setSelectedRole(formValues.role_code); 
+        setSelectedRole(nextCode); 
       } catch (error) {
-        Swal.fire({ icon: "error", title: "เกิดข้อผิดพลาด", text: error.response?.data?.message || "ไม่สามารถเพิ่ม Role ได้ รหัสนี้อาจซ้ำ" });
+        Swal.fire({ icon: "error", title: "เกิดข้อผิดพลาด", text: error.response?.data?.message || "ไม่สามารถเพิ่ม Role ได้" });
+      }
+    }
+  };
+
+  // ==========================================
+  // CRUD: แก้ไข (Update)
+  // ==========================================
+  const handleEditRole = async (e, role) => {
+    e.stopPropagation(); 
+    
+    const { value: newName } = await Swal.fire({
+      title: `แก้ไขชื่อ Role (${role.role_code})`,
+      input: "text",
+      inputValue: role.role_name,
+      showCancelButton: true,
+      confirmButtonColor: "#d32f2f",
+      confirmButtonText: "บันทึกการแก้ไข",
+      cancelButtonText: "ยกเลิก",
+      inputValidator: (value) => {
+        if (!value.trim()) return "กรุณากรอกชื่อ Role";
+      }
+    });
+
+    if (newName && newName !== role.role_name) {
+      try {
+        await axios.put(`${API_URL}/roles/${role.role_code}`, { role_name: newName });
+        Swal.fire({ icon: "success", title: "สำเร็จ", text: "แก้ไขชื่อ Role เรียบร้อยแล้ว", timer: 1500, showConfirmButton: false });
+        fetchRoles();
+      } catch (error) {
+        Swal.fire({ icon: "error", title: "เกิดข้อผิดพลาด", text: error.response?.data?.message || "ไม่สามารถแก้ไข Role ได้" });
+      }
+    }
+  };
+
+  // ==========================================
+  // CRUD: ลบ (Delete)
+  // ==========================================
+  const handleDeleteRole = async (e, roleCode) => {
+    e.stopPropagation(); 
+
+    const confirm = await Swal.fire({
+      title: "ยืนยันการลบ?",
+      text: `คุณต้องการลบสิทธิ์รหัส ${roleCode} ใช่หรือไม่? ข้อมูลผู้ใช้ที่ใช้สิทธิ์นี้อาจได้รับผลกระทบ`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d32f2f",
+      cancelButtonColor: "#6c757d",
+      confirmButtonText: "ใช่, ลบเลย!",
+      cancelButtonText: "ยกเลิก"
+    });
+
+    if (confirm.isConfirmed) {
+      try {
+        await axios.delete(`${API_URL}/roles/${roleCode}`);
+        Swal.fire({ icon: "success", title: "ลบสำเร็จ", timer: 1500, showConfirmButton: false });
+        
+        if (selectedRole === roleCode) {
+          setSelectedRole("");
+          setPermissions([]);
+        }
+        fetchRoles();
+      } catch (error) {
+        Swal.fire({ icon: "error", title: "เกิดข้อผิดพลาด", text: error.response?.data?.message || "ไม่สามารถลบ Role ได้ เนื่องจากอาจมีข้อมูลอื่นอ้างอิงอยู่" });
       }
     }
   };
@@ -176,9 +253,8 @@ function Permission() {
                     <div className="p-4 text-center text-muted">ไม่พบข้อมูล Role</div>
                   ) : (
                     roles.map((r) => (
-                      <button
+                      <div
                         key={r.role_code}
-                        type="button"
                         className={`list-group-item list-group-item-action py-3 px-4 d-flex justify-content-between align-items-center border-bottom ${
                           selectedRole === r.role_code ? "active" : ""
                         }`}
@@ -189,11 +265,28 @@ function Permission() {
                           <div className="fs-5 fw-bold">
                             {r.role_name}
                           </div>
-                          <small className="text-muted d-block mt-1">
+                          <small className={`d-block mt-1 ${selectedRole === r.role_code ? "text-light opacity-75" : "text-muted"}`}>
                             รหัส: {r.role_code}
                           </small>
                         </div>
-                      </button>
+
+                        <div className="d-flex gap-2">
+                          <button 
+                            className={`btn btn-sm ${selectedRole === r.role_code ? 'btn-light text-primary' : 'btn-outline-secondary'}`}
+                            onClick={(e) => handleEditRole(e, r)}
+                            title="แก้ไขชื่อ Role"
+                          >
+                            ✏️
+                          </button>
+                          <button 
+                            className={`btn btn-sm ${selectedRole === r.role_code ? 'btn-light text-danger' : 'btn-outline-danger'}`}
+                            onClick={(e) => handleDeleteRole(e, r.role_code)}
+                            title="ลบ Role"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
                     ))
                   )}
                 </div>

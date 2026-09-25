@@ -693,6 +693,54 @@ app.put("/api/role-permissions/:roleCode", async (req, res) => {
 });
 
 // ==========================================
+// API: ลบ Role (Update แบบเช็คข้อมูลอ้างอิง)
+// ==========================================
+app.delete("/api/roles/:role_code", async (req, res) => {
+  const { role_code } = req.params;
+  let connection;
+  try {
+    connection = await getConnection();
+
+    // 1. เช็คก่อนว่ามี Users คนไหนใช้ Role นี้อยู่หรือไม่
+    const checkUser = await connection.execute(
+      `SELECT COUNT(*) FROM users WHERE role_code = :role_code`,
+      { role_code }
+    );
+    
+    // ถ้ามี User ใช้อยู่ (Count > 0) ให้ส่งแจ้งเตือนกลับไป
+    if (checkUser.rows[0][0] > 0) {
+      return res.status(400).json({ 
+        message: "ไม่สามารถลบได้ เนื่องจากมีผู้ใช้งานกำลังผูกกับสิทธิ์นี้อยู่ กรุณาเปลี่ยนสิทธิ์ให้ผู้ใช้เหล่านั้นก่อน" 
+      });
+    }
+
+    // 2. ลบข้อมูลสิทธิ์หน้าจอในตาราง role_permissions ก่อน (ล้างข้อมูลลูก)
+    await connection.execute(
+      `DELETE FROM role_permissions WHERE role_code = :role_code`,
+      { role_code },
+      { autoCommit: false } // ยังไม่ commit รอทำพร้อมลบ Role
+    );
+
+    // 3. ลบ Role ในตารางหลัก
+    await connection.execute(
+      `DELETE FROM roles WHERE role_code = :role_code`,
+      { role_code },
+      { autoCommit: true } // Commit ทีเดียว
+    );
+
+    res.json({ message: "Role deleted successfully" });
+  } catch (error) {
+    console.error("Delete Role Error:", error);
+    res.status(500).json({ 
+      message: "เกิดข้อผิดพลาดที่เซิร์ฟเวอร์ ไม่สามารถลบข้อมูลได้", 
+      error: error.message 
+    });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
+// ==========================================
 // API: ดึงรายงานพฤติกรรมผู้ใช้งาน (Report)
 // ==========================================
 app.get("/api/reports/user-behavior", async (req, res) => {
