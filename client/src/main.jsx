@@ -6,7 +6,7 @@ import {
   Navigate,
 } from "react-router-dom";
 import Home from "./Home";
-import Users from "./Users";
+import Employee from "./Employee";
 import Customer from "./Customer";
 import Login from "./Login";
 import Product from "./Product";
@@ -24,10 +24,10 @@ const router = createBrowserRouter([
   {
     // สมมติว่าหน้า Employee ของคุณใช้จัดการพนักงาน ซึ่งเทียบเท่ากับ Profile หรือ Dashboard ในตาราง
     // คุณก็เลือกรหัสที่ตรงกันมาใส่ (ตัวอย่างนี้ขอสมมติเป็น S04 - Profile)
-    path: "/Users",
+    path: "/employee",
     element: (
       <ProtectedRoute requiredScreenCode="S04">
-        <Users />
+        <Employee />
       </ProtectedRoute>
     ),
   },

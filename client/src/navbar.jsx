@@ -10,10 +10,10 @@ function Navbar() {
 
   // 2. เช็คสิทธิ์ตาม SCREEN_CODE จากตารางของคุณ
   // (คุณสามารถแก้รหัส S04, S02, S03 ให้ตรงกับหน้าเว็บจริงๆ ในตาราง screens ได้เลย)
-  const canAccessUsr = allowedScreens.includes("S04"); 
+  const canAccessEmp = allowedScreens.includes("S04"); 
   const canAccessCus = allowedScreens.includes("S02"); 
   const canAccessProd = allowedScreens.includes("S03"); 
-  const canAccessReport = allowedScreens.includes("S01"); // สมมติให้ S01 คือ Report
+  const canAccessReport = allowedScreens.includes("S01");
 
   const handleLogout = () => {
     localStorage.removeItem("user");
@@ -33,10 +33,11 @@ function Navbar() {
             </Link>
           </li>
           
-          {canAccessUsr && (
+          {/* 2. นำตัวแปรใหม่มาใช้ และแก้ to="..." เป็นตัวพิมพ์เล็ก */}
+          {canAccessEmp && (
             <li className="nav-item">
-              <Link className="nav-link" to="/Users">
-                Users
+              <Link className="nav-link" to="/employee">
+                Employee
               </Link>
             </li>
           )}

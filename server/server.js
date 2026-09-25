@@ -137,10 +137,15 @@ app.get("/api/users", async (req, res) => {
   let connection;
   try {
     connection = await getConnection();
+    // ใช้ LEFT JOIN เพื่อดึง role_name และ dept_name มาแสดง
     const result = await connection.execute(
-      `SELECT user_code, first_name, last_name, email, username, role_code, dept_code 
-       FROM users 
-       ORDER BY user_code`
+      `SELECT u.user_code, u.first_name, u.last_name, u.email, u.username, 
+              u.role_code, r.role_name, 
+              u.dept_code, d.dept_name 
+       FROM users u
+       LEFT JOIN roles r ON u.role_code = r.role_code
+       LEFT JOIN departments d ON u.dept_code = d.dept_code
+       ORDER BY u.user_code`
     );
     const users = result.rows.map((row) => ({
       user_code: row[0],
@@ -149,11 +154,62 @@ app.get("/api/users", async (req, res) => {
       email: row[3],
       username: row[4],
       role_code: row[5],
-      dept_code: row[6],
+      role_name: row[6] || "-",
+      dept_code: row[7],
+      dept_name: row[8] || "-",
     }));
     res.json(users);
   } catch (error) {
     res.status(500).json({ message: "Cannot get users", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
+// =====================================================
+// GET ROLES FOR DROPDOWN (ไม่เอา Passenger)
+// =====================================================
+app.get("/api/roles", async (req, res) => {
+  let connection;
+  try {
+    connection = await getConnection();
+    // ใช้ LOWER() เพื่อให้เช็คคำว่า passenger ได้ครอบคลุมทั้งตัวเล็กตัวใหญ่
+    const result = await connection.execute(
+      `SELECT role_code, role_name 
+       FROM roles 
+       WHERE LOWER(role_name) NOT LIKE '%passenger%' 
+         AND LOWER(role_name) NOT LIKE '%passanger%'
+       ORDER BY role_code`
+    );
+    const roles = result.rows.map((row) => ({
+      role_code: row[0],
+      role_name: row[1],
+    }));
+    res.json(roles);
+  } catch (error) {
+    res.status(500).json({ message: "Cannot get roles", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
+// =====================================================
+// GET DEPARTMENTS FOR DROPDOWN
+// =====================================================
+app.get("/api/departments", async (req, res) => {
+  let connection;
+  try {
+    connection = await getConnection();
+    const result = await connection.execute(
+      `SELECT dept_code, dept_name FROM departments ORDER BY dept_code`
+    );
+    const depts = result.rows.map((row) => ({
+      dept_code: row[0],
+      dept_name: row[1],
+    }));
+    res.json(depts);
+  } catch (error) {
+    res.status(500).json({ message: "Cannot get depts", error: error.message });
   } finally {
     if (connection) await connection.close();
   }

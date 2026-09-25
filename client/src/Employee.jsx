@@ -3,8 +3,13 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import Navbar from "./Navbar";
 
-function Users() {
+function Employee() {
   const [users, setUsers] = useState([]);
+  
+  // เพิ่ม State สำหรับเก็บตัวเลือก Dropdown
+  const [roleOptions, setRoleOptions] = useState([]);
+  const [deptOptions, setDeptOptions] = useState([]);
+
   const [formData, setFormData] = useState({
     user_code: "", first_name: "", last_name: "", email: "", 
     username: "", password: "", role_code: "", dept_code: ""
@@ -13,6 +18,7 @@ function Users() {
 
   useEffect(() => {
     fetchUsers();
+    fetchOptions(); // เรียกใช้งานดึงข้อมูล Dropdown ตอนโหลดหน้าเว็บ
   }, []);
 
   const fetchUsers = async () => {
@@ -21,6 +27,20 @@ function Users() {
       setUsers(response.data);
     } catch (error) {
       console.error("Error fetching users:", error);
+    }
+  };
+
+  // ฟังก์ชันสำหรับดึงข้อมูล Role และ Dept จาก Backend
+  const fetchOptions = async () => {
+    try {
+      const [roleRes, deptRes] = await Promise.all([
+        axios.get("http://localhost:5000/api/roles"),
+        axios.get("http://localhost:5000/api/departments")
+      ]);
+      setRoleOptions(roleRes.data);
+      setDeptOptions(deptRes.data);
+    } catch (error) {
+      console.error("Error fetching options:", error);
     }
   };
 
@@ -72,7 +92,7 @@ function Users() {
     }
   };
 
-return (
+  return (
     <>
       <Navbar />
       <div className="container mt-4">
@@ -96,12 +116,31 @@ return (
             <div className="col-md-3">
               <input type="password" name="password" className="form-control" placeholder={isEditing ? "รหัสผ่านใหม่ (ปล่อยว่างถ้าไม่เปลี่ยน)" : "รหัสผ่าน (Password)"} value={formData.password} onChange={handleInputChange} required={!isEditing} />
             </div>
+            
+            {/* ---------------- เปลี่ยนเป็น Dropdown ดึงจาก DB ตรงนี้ ---------------- */}
             <div className="col-md-3">
-              <input type="text" name="role_code" className="form-control" placeholder="รหัสสิทธิ์ (Role Code)" value={formData.role_code} onChange={handleInputChange} />
+              <select name="role_code" className="form-select" value={formData.role_code} onChange={handleInputChange} required>
+                <option value="">-- เลือกสิทธิ์ (Role) --</option>
+                {roleOptions.map((role) => (
+                  <option key={role.role_code} value={role.role_code}>
+                    {role.role_name}
+                  </option>
+                ))}
+              </select>
             </div>
+            
             <div className="col-md-3">
-              <input type="text" name="dept_code" className="form-control" placeholder="รหัสแผนก (Dept Code)" value={formData.dept_code} onChange={handleInputChange} />
+              <select name="dept_code" className="form-select" value={formData.dept_code} onChange={handleInputChange} required>
+                <option value="">-- เลือกแผนก (Dept) --</option>
+                {deptOptions.map((dept) => (
+                  <option key={dept.dept_code} value={dept.dept_code}>
+                    {dept.dept_name}
+                  </option>
+                ))}
+              </select>
             </div>
+            {/* ------------------------------------------------------------------------- */}
+
             <div className="col-md-3 d-flex align-items-center">
               <button type="submit" className="btn btn-primary w-100">{isEditing ? "อัปเดตข้อมูล" : "เพิ่มผู้ใช้"}</button>
               {isEditing && (
@@ -121,8 +160,8 @@ return (
               <th>ชื่อ - นามสกุล</th>
               <th>อีเมล</th>
               <th>Username</th>
-              <th>Role</th>
-              <th>Dept</th>
+              <th>Role (สิทธิ์)</th>
+              <th>Dept (แผนก)</th>
               <th>จัดการ</th>
             </tr>
           </thead>
@@ -133,8 +172,11 @@ return (
                 <td>{user.first_name} {user.last_name}</td>
                 <td>{user.email}</td>
                 <td>{user.username}</td>
-                <td>{user.role_code}</td>
-                <td>{user.dept_code}</td>
+                
+                {/* แสดงชื่อ Role และ Dept ในตาราง */}
+                <td>{user.role_name}</td>
+                <td>{user.dept_name}</td>
+                
                 <td>
                   <button className="btn btn-warning btn-sm me-2" onClick={() => handleEdit(user)}>แก้ไข</button>
                   <button className="btn btn-danger btn-sm" onClick={() => handleDelete(user.user_code)}>ลบ</button>
@@ -148,4 +190,4 @@ return (
   );
 }
 
-export default Users;
+export default Employee;
