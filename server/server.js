@@ -626,6 +626,24 @@ app.get("/api/role-permissions/:roleCode", async (req, res) => {
   }
 });
 
+app.post("/api/roles", async (req, res) => {
+  const { role_code, role_name } = req.body;
+  let connection;
+  try {
+    connection = await getConnection();
+    await connection.execute(
+      `INSERT INTO roles (role_code, role_name) VALUES (:1, :2)`,
+      [role_code, role_name],
+      { autoCommit: true }
+    );
+    res.status(201).json({ message: "Role created successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Error creating role", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
 // =====================================================
 // REPLACE PERMISSIONS OF A ROLE
 // (ลบสิทธิ์เดิมทั้งหมดของ role นี้ แล้วใส่ชุดใหม่ที่ frontend ส่งมา)

@@ -4,15 +4,18 @@
 .permission-page {
   font-family: "Prompt", sans-serif;
   color: #1a1d29;
+  background-color: #f4f4f6;
 }
 
 .permission-page h1,
-.permission-page h4 {
+.permission-page h2,
+.permission-page h4,
+.permission-page h5 {
   font-family: "Prompt", sans-serif;
   color: #1a1d29;
 }
 
-.permission-page h1 {
+.permission-page h2 {
   font-size: 28px;
   font-weight: 700;
 }
@@ -22,6 +25,7 @@
   border: 1px solid #e1e4ea;
   border-radius: 16px;
   overflow: hidden;
+  background: #ffffff;
 }
 
 .permission-page .card-body {
@@ -46,10 +50,11 @@
 
 /* --- Table header in brand red instead of Bootstrap blue --- */
 .permission-page .table-primary,
-.permission-page .table-primary > th {
-  background-color: #fdecea;
-  color: #9a0007;
-  border-color: #f7c9c5;
+.permission-page .table-primary > th,
+.permission-page .table-primary > td {
+  background-color: #fdecea !important;
+  color: #9a0007 !important;
+  border-color: #f7c9c5 !important;
 }
 
 .permission-page .table-bordered {
@@ -58,7 +63,7 @@
 }
 
 /* --- Badges --- */
-.permission-page .badge.bg-info {
+.permission-page .badge.bg-primary {
   background-color: #ffcdd2 !important;
   color: #9a0007 !important;
 }
@@ -77,12 +82,14 @@
   padding: 10px 22px;
   box-shadow: 0 8px 20px rgba(211, 47, 47, 0.3);
   transition: opacity 0.15s ease, transform 0.1s ease;
+  color: #ffffff;
 }
 
 .permission-page .btn-primary:hover,
 .permission-page .btn-primary:focus {
   background: linear-gradient(180deg, #e53935 0%, #b71c1c 100%);
   opacity: 0.94;
+  color: #ffffff;
 }
 
 .permission-page .btn-primary:active {
@@ -93,15 +100,27 @@
   opacity: 0.7;
 }
 
-/* --- Up/down move buttons --- */
+/* --- Up/down move buttons & Add Role button --- */
 .permission-page .btn-outline-secondary {
   border-radius: 8px;
-  border-color: #e1e4ea;
+  border: 1px solid #e1e4ea;
   color: #4a4f5c;
+  background-color: transparent;
+  font-weight: 500;
 }
 
 .permission-page .btn-outline-secondary:hover {
   background-color: #fdecea;
   border-color: #f7c9c5;
   color: #9a0007;
+}
+
+/* --- Active List Group Item for Roles --- */
+.permission-page .list-group-item.active {
+  background-color: #d32f2f;
+  border-color: #d32f2f;
+  color: #ffffff !important;
+}
+.permission-page .list-group-item.active .text-muted {
+  color: rgba(255, 255, 255, 0.7) !important;
 }
