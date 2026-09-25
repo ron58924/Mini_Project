@@ -1,0 +1,41 @@
+.permission-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.permission-role-select {
+  margin-bottom: 16px;
+}
+
+.permission-role-select select {
+  margin-left: 8px;
+  padding: 6px 10px;
+}
+
+.permission-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+}
+
+.permission-table th,
+.permission-table td {
+  border: 1px solid #ddd;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.permission-table th {
+  background-color: #f5f5f5;
+}
+
+.permission-table button {
+  margin-right: 4px;
+  cursor: pointer;
+}
+
+.permission-message {
+  margin-top: 8px;
+  color: #2e7d32;
+}

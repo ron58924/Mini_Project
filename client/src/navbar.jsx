@@ -65,6 +65,14 @@ function Navbar() {
               </Link>
             </li>
           )}
+
+          {canAccessPermission && (
+            <li className="nav-item">
+              <Link className="nav-link" to="/permission">
+                Permission
+              </Link>
+            </li>
+          )}
         </ul>
 
         <div className="d-flex align-items-center text-white">

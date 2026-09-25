@@ -1,0 +1,305 @@
+@import url("https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap");
+
+* {
+  box-sizing: border-box;
+}
+
+.register-page {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 20px;
+  font-family: "Prompt", sans-serif;
+  background: radial-gradient(
+      circle at 50% 20%,
+      rgba(211, 47, 47, 0.08),
+      transparent 50%
+    ),
+    #f8fafc;
+}
+
+/* =========================
+   Card
+========================= */
+.register-card {
+  position: relative;
+  width: 460px;
+  max-width: 100%;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 20px;
+  background: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 24px;
+  box-shadow: 0px 20px 45px -10px rgba(211, 47, 47, 0.15),
+    0px 10px 20px -8px rgba(0, 0, 0, 0.08);
+}
+
+/* =========================
+   Header
+========================= */
+.register-header {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.register-header h2 {
+  margin: 0;
+  padding-top: 4px;
+  color: #282020;
+  font-size: 28px;
+  line-height: 30px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  text-align: center;
+}
+
+.register-header p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 30px;
+  font-weight: 300;
+  text-align: center;
+}
+
+/* =========================
+   Form & Fields
+========================= */
+.register-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.field-full {
+  width: 100%;
+}
+
+.field label {
+  width: 100%;
+  color: #334155;
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 500;
+}
+
+.field label span {
+  color: #d32f2f;
+}
+
+.field-row {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.field-error {
+  margin: 2px 0 0;
+  color: #d32f2f;
+  font-size: 11.5px;
+  line-height: 14px;
+  font-weight: 400;
+}
+
+/* =========================
+   Input
+========================= */
+.field input {
+  width: 100%;
+  height: 42px;
+  padding: 9px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  outline: none;
+  background: #fafbfc;
+  color: #0f172a;
+  font-family: "Prompt", sans-serif;
+  font-size: 14px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.field input::placeholder {
+  color: #94a3b8;
+}
+
+.field input:focus {
+  border-color: #d32f2f;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(211, 47, 47, 0.12);
+}
+
+/* =========================
+   Password
+========================= */
+.password-input {
+  position: relative;
+  width: 100%;
+}
+
+.password-input input {
+  padding-right: 42px;
+}
+
+.eye-button {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 40px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.eye-button:hover {
+  color: #64748b;
+}
+
+/* =========================
+   Agreement Checkbox
+========================= */
+.agreement {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.agreement input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.custom-checkbox {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.agreement input:checked + .custom-checkbox {
+  background: #d32f2f;
+  border-color: #d32f2f;
+}
+
+.agreement-text {
+  color: #475569;
+  font-size: 12px;
+}
+
+.agreement-text strong {
+  color: #d32f2f;
+  font-weight: 600;
+}
+
+/* =========================
+   Register Button
+========================= */
+.register-button {
+  width: 100%;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #e53935 0%, #b71c1c 100%);
+  color: #ffffff;
+  font-family: "Prompt", sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(211, 47, 47, 0.25);
+  transition: opacity 0.2s ease, transform 0.1s ease;
+}
+
+.register-button:hover {
+  opacity: 0.95;
+}
+
+.register-button:active {
+  transform: translateY(1px);
+}
+
+.register-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* =========================
+   Footer
+========================= */
+.register-footer {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding-top: 14px;
+  border-top: 1px solid #f1f5f9;
+  color: #475569;
+  font-size: 13px;
+}
+
+.login-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #d32f2f;
+  font-family: "Prompt", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.login-link:hover {
+  text-decoration: underline;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .register-card {
+    padding: 24px 18px;
+  }
+  .field-row {
+    flex-direction: column;
+    gap: 14px;
+  }
+}

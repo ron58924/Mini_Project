@@ -522,3 +522,128 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
+// =====================================================
+// GET ALL ROLES
+// =====================================================
+app.get("/api/roles", async (req, res) => {
+  let connection;
+  try {
+    connection = await getConnection();
+    const result = await connection.execute(
+      `SELECT role_code, role_name FROM roles ORDER BY role_code`
+    );
+    const roles = result.rows.map((row) => ({
+      role_code: row[0],
+      role_name: row[1],
+    }));
+    res.json(roles);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Cannot get roles", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
+// =====================================================
+// GET ALL SCREENS
+// =====================================================
+app.get("/api/screens", async (req, res) => {
+  let connection;
+  try {
+    connection = await getConnection();
+    const result = await connection.execute(
+      `SELECT screen_code, screen_name FROM screens ORDER BY screen_code`
+    );
+    const screens = result.rows.map((row) => ({
+      screen_code: row[0],
+      screen_name: row[1],
+    }));
+    res.json(screens);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Cannot get screens", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
+// =====================================================
+// GET PERMISSIONS OF A SPECIFIC ROLE
+// =====================================================
+app.get("/api/role-permissions/:roleCode", async (req, res) => {
+  let connection;
+  try {
+    const { roleCode } = req.params;
+    connection = await getConnection();
+    const result = await connection.execute(
+      `SELECT screen_code, seq_no FROM role_permissions
+       WHERE role_code = :roleCode
+       ORDER BY seq_no`,
+      { roleCode }
+    );
+    const perms = result.rows.map((row) => ({
+      screen_code: row[0],
+      seq_no: row[1],
+    }));
+    res.json(perms);
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "Cannot get role permissions", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
+// =====================================================
+// REPLACE PERMISSIONS OF A ROLE
+// (ลบสิทธิ์เดิมทั้งหมดของ role นี้ แล้วใส่ชุดใหม่ที่ frontend ส่งมา)
+// body: { screens: [{ screen_code, seq_no }, ...] }
+// =====================================================
+app.put("/api/role-permissions/:roleCode", async (req, res) => {
+  let connection;
+  try {
+    const { roleCode } = req.params;
+    const { screens } = req.body;
+
+    if (!Array.isArray(screens)) {
+      return res.status(400).json({ message: "screens must be an array" });
+    }
+
+    connection = await getConnection();
+
+    // ลบสิทธิ์เดิมของ role นี้ทั้งหมดก่อน
+    await connection.execute(
+      `DELETE FROM role_permissions WHERE role_code = :roleCode`,
+      { roleCode }
+    );
+
+    // ใส่สิทธิ์ใหม่ทีละแถว
+    for (const s of screens) {
+      await connection.execute(
+        `INSERT INTO role_permissions (role_code, screen_code, seq_no)
+         VALUES (:roleCode, :screenCode, :seqNo)`,
+        { roleCode, screenCode: s.screen_code, seqNo: s.seq_no }
+      );
+    }
+
+    await connection.commit();
+    res.json({ message: "Permissions updated successfully" });
+  } catch (error) {
+    console.error(error);
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch (rollbackErr) {
+        console.error("Rollback failed:", rollbackErr);
+      }
+    }
+    res
+      .status(500)
+      .json({ message: "Cannot update permissions", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});

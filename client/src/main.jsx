@@ -9,7 +9,9 @@ import Home from "./Home";
 import Employee from "./Employee";
 import Customer from "./Customer";
 import Login from "./Login";
+import Register from "./Register";
 import Product from "./Product";
+import Permission from "./Permission";
 import ProtectedRoute from "./ProtectedRoute";
 
 const router = createBrowserRouter([
@@ -20,6 +22,11 @@ const router = createBrowserRouter([
   {
     path: "/login",
     element: <Login />,
+  },
+ 
+  {
+    path: "/register",
+    element: <Register />,
   },
   {
     // สมมติว่าหน้า Employee ของคุณใช้จัดการพนักงาน ซึ่งเทียบเท่ากับ Profile หรือ Dashboard ในตาราง
@@ -32,7 +39,6 @@ const router = createBrowserRouter([
     ),
   },
   {
-    // สมมติว่าหน้า Customer คือหน้าเกี่ยวกับการจอง
     path: "/customer",
     element: (
       <ProtectedRoute requiredScreenCode="S02">
@@ -41,11 +47,19 @@ const router = createBrowserRouter([
     ),
   },
   {
-    // สมมติว่าหน้า Product คือหน้าเกี่ยวกับเส้นทาง
     path: "/product",
     element: (
       <ProtectedRoute requiredScreenCode="S03">
         <Product />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // หน้าจัดการสิทธิ์ (Permission) - ปรับ requiredScreenCode ให้ตรงกับรหัสจริงใน screens table
+    path: "/permission",
+    element: (
+      <ProtectedRoute requiredScreenCode="S05">
+        <Permission />
       </ProtectedRoute>
     ),
   },
@@ -55,8 +69,12 @@ const router = createBrowserRouter([
   },
 ]);
 
-ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <RouterProvider router={router} />
-  </React.StrictMode>,
-);
+const rootElement = document.getElementById("root");
+
+if (rootElement) {
+  ReactDOM.createRoot(rootElement).render(
+    <React.StrictMode>
+      <RouterProvider router={router} />
+    </React.StrictMode>
+  );
+}
