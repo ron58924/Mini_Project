@@ -44,8 +44,19 @@ function Employee() {
         axios.get("http://localhost:5000/api/roles"),
         axios.get("http://localhost:5000/api/departments")
       ]);
-      setRoleOptions(roleRes.data);
-      setDeptOptions(deptRes.data);
+      
+      // 1. กรองสิทธิ์ (Role) ไม่ให้มี Passenger มาโผล่ในหน้าพนักงาน
+      const staffRoles = roleRes.data.filter(
+        (role) => !role.role_name.toLowerCase().includes("passenger")
+      );
+      setRoleOptions(staffRoles);
+
+      // 2. กรองแผนก (Dept) ตัดคณะ (Faculty) ทิ้งไป ให้เหลือแต่ของพนักงาน
+      const staffDepartments = deptRes.data.filter(
+        (dept) => !dept.dept_name.includes("Faculty")
+      );
+      setDeptOptions(staffDepartments);
+
     } catch (error) {
       console.error("Error fetching options:", error);
     }
