@@ -3,10 +3,18 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import Navbar from "./Navbar";
 
+// ชุดคำแปลชื่อคณะ (อ้างอิงจากข้อมูลใน Database)
+const facultyTranslations = {
+  "Faculty of Engineering": "คณะวิศวกรรมศาสตร์",
+  "Faculty of Business Administration": "คณะบริหารธุรกิจ",
+  "Faculty of Veterinary Medicine": "คณะสัตวแพทยศาสตร์",
+  "Faculty of Information Science and Technology": "คณะวิทยาการคอมพิวเตอร์และเทคโนโลยีสารสนเทศ"
+};
+
 function Passenger() {
   const [passengers, setPassengers] = useState([]);
+  const [deptOptions, setDeptOptions] = useState([]); // State สำหรับเก็บตัวเลือกคณะ
   
-  // สังเกตว่า formData เราจะตั้งค่าเริ่มต้น role_code เป็น "R03" เสมอ
   const [formData, setFormData] = useState({
     user_code: "", first_name: "", last_name: "", email: "", 
     username: "", password: "", role_code: "R03", dept_code: ""
@@ -15,6 +23,7 @@ function Passenger() {
 
   useEffect(() => {
     fetchPassengers();
+    fetchFaculties(); // เรียกใช้งานดึงข้อมูลคณะตอนโหลดหน้าเว็บ
   }, []);
 
   const fetchPassengers = async () => {
@@ -26,6 +35,20 @@ function Passenger() {
       setPassengers(passengersOnly);
     } catch (error) {
       console.error("Error fetching passengers:", error);
+    }
+  };
+
+  const fetchFaculties = async () => {
+    try {
+      const response = await axios.get("http://localhost:5000/api/departments");
+      
+      // กรองเอาเฉพาะแผนกที่มีคำว่า "Faculty" (ตัดพวกแผนกแอดมินออก)
+      const facultiesOnly = response.data.filter((dept) => 
+        dept.dept_name.includes("Faculty")
+      );
+      setDeptOptions(facultiesOnly);
+    } catch (error) {
+      console.error("Error fetching faculties:", error);
     }
   };
 
@@ -43,7 +66,6 @@ function Passenger() {
         await axios.post("http://localhost:5000/api/users", formData);
         Swal.fire({ icon: "success", title: "เพิ่มผู้โดยสารสำเร็จ", timer: 1500, showConfirmButton: false });
       }
-      // รีเซ็ตฟอร์ม โดยคงค่า role_code เป็น R03 ไว้
       setFormData({ user_code: "", first_name: "", last_name: "", email: "", username: "", password: "", role_code: "R03", dept_code: "" });
       setIsEditing(false);
       fetchPassengers();
@@ -53,7 +75,7 @@ function Passenger() {
   };
 
   const handleEdit = (user) => {
-    setFormData({ ...user, password: "", role_code: "R03", dept_code: "" });
+    setFormData({ ...user, password: "", role_code: "R03" });
     setIsEditing(true);
   };
 
@@ -102,6 +124,21 @@ function Passenger() {
               <input type="password" name="password" className="form-control" placeholder={isEditing ? "รหัสผ่านใหม่ (ปล่อยว่างถ้าไม่เปลี่ยน)" : "รหัสผ่าน (Password)"} value={formData.password} onChange={handleInputChange} required={!isEditing} />
             </div>
 
+            {/* เพิ่ม Dropdown คณะ */}
+            <div className="col-md-3">
+              <select name="dept_code" className="form-select" value={formData.dept_code} onChange={handleInputChange} required>
+                <option value="">-- เลือกคณะ (Faculty) --</option>
+                {deptOptions.map((dept) => {
+                  const thaiName = facultyTranslations[dept.dept_name] || dept.dept_name;
+                  return (
+                    <option key={dept.dept_code} value={dept.dept_code}>
+                      {thaiName}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
             <div className="col-md-3 d-flex align-items-center">
               <button type="submit" className="btn btn-primary w-100">{isEditing ? "อัปเดตข้อมูล" : "เพิ่มผู้โดยสาร"}</button>
               {isEditing && (
@@ -120,22 +157,29 @@ function Passenger() {
               <th>ชื่อ - นามสกุล</th>
               <th>อีเมล</th>
               <th>Username</th>
+              <th>คณะ (Faculty)</th>
               <th>จัดการ</th>
             </tr>
           </thead>
           <tbody>
-            {passengers.map((user) => (
-              <tr key={user.user_code}>
-                <td>{user.user_code}</td>
-                <td>{user.first_name} {user.last_name}</td>
-                <td>{user.email}</td>
-                <td>{user.username}</td>
-                <td>
-                  <button className="btn btn-warning btn-sm me-2" onClick={() => handleEdit(user)}>แก้ไข</button>
-                  <button className="btn btn-danger btn-sm" onClick={() => handleDelete(user.user_code)}>ลบ</button>
-                </td>
-              </tr>
-            ))}
+            {passengers.map((user) => {
+              // แปลชื่อคณะในตารางให้เป็นภาษาไทยด้วย
+              const displayDeptName = facultyTranslations[user.dept_name] || user.dept_name || "-";
+              
+              return (
+                <tr key={user.user_code}>
+                  <td>{user.user_code}</td>
+                  <td>{user.first_name} {user.last_name}</td>
+                  <td>{user.email}</td>
+                  <td>{user.username}</td>
+                  <td>{displayDeptName}</td>
+                  <td>
+                    <button className="btn btn-warning btn-sm me-2" onClick={() => handleEdit(user)}>แก้ไข</button>
+                    <button className="btn btn-danger btn-sm" onClick={() => handleDelete(user.user_code)}>ลบ</button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
