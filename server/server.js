@@ -110,24 +110,24 @@ app.post("/api/login", async (req, res) => {
 });
 
 // =====================================================
-// GENERATE USER ID (USR001, USR002, ...)
+// GENERATE USER ID (EMP001, EMP002, ...)
 // =====================================================
 async function generateUserCode(connection) {
   const result = await connection.execute(
-    // แก้จาก 'U%' เป็น 'USR%' เพื่อให้เจาะจงเฉพาะรหัสผู้ใช้
-    `SELECT MAX(user_code) AS MAXID FROM users WHERE user_code LIKE 'USR%'`
+    // เปลี่ยนเงื่อนไขให้ค้นหารหัสที่ขึ้นต้นด้วย 'EMP'
+    `SELECT MAX(user_code) AS MAXID FROM users WHERE user_code LIKE 'EMP%'`
   );
   let runningNumber = 1;
   if (result.rows[0][0]) {
-    const maxId = result.rows[0][0]; // ตัวอย่างข้อมูลที่ได้มาคือ 'USR001'
+    const maxId = result.rows[0][0]; // ตัวอย่างข้อมูลที่ได้มาคือ 'EMP001'
     
-    // แก้จาก substring(1) เป็น substring(3) เพื่อตัดคำว่า "USR" ออก เหลือแค่ "001"
+    // ตัดตัวอักษร 3 ตัวแรก ("EMP") ออก แล้วเอาตัวเลขมาบวก 1
     const lastNumber = parseInt(maxId.substring(3), 10); 
     runningNumber = lastNumber + 1;
   }
   
-  // แก้จาก `U${...}` เป็น `USR${...}`
-  return `USR${String(runningNumber).padStart(3, "0")}`;
+  // คืนค่ารูปแบบใหม่โดยใช้คำว่า EMP นำหน้า
+  return `EMP${String(runningNumber).padStart(3, "0")}`;
 }
 
 // =====================================================

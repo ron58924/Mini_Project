@@ -24,7 +24,14 @@ function Employee() {
   const fetchUsers = async () => {
     try {
       const response = await axios.get("http://localhost:5000/api/users");
-      setUsers(response.data);
+      
+      // กรองข้อมูล: เก็บเฉพาะคนที่ role_name ไม่มีคำว่า passenger (แปลงเป็นพิมพ์เล็กเพื่อเช็ค)
+      const employeesOnly = response.data.filter((user) => {
+        const roleName = user.role_name ? user.role_name.toLowerCase() : "";
+        return !roleName.includes("passenger") && !roleName.includes("passanger");
+      });
+
+      setUsers(employeesOnly); // อัปเดต State เฉพาะรายชื่อพนักงาน
     } catch (error) {
       console.error("Error fetching users:", error);
     }
