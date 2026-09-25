@@ -1,41 +1,107 @@
+@import url("https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&display=swap");
+
+/* ================= MUT Shuttle Bus theme (matches Login.css) ================= */
 .permission-page {
-  max-width: 720px;
-  margin: 0 auto;
+  font-family: "Prompt", sans-serif;
+  color: #1a1d29;
+}
+
+.permission-page h1,
+.permission-page h4 {
+  font-family: "Prompt", sans-serif;
+  color: #1a1d29;
+}
+
+.permission-page h1 {
+  font-size: 28px;
+  font-weight: 700;
+}
+
+/* --- Cards --- */
+.permission-page .card {
+  border: 1px solid #e1e4ea;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.permission-page .card-body {
   padding: 24px;
 }
 
-.permission-role-select {
-  margin-bottom: 16px;
+/* --- Select / inputs --- */
+.permission-page .form-select,
+.permission-page .form-check-input {
+  border-color: #e1e4ea;
 }
 
-.permission-role-select select {
-  margin-left: 8px;
-  padding: 6px 10px;
+.permission-page .form-select:focus {
+  border-color: #d32f2f;
+  box-shadow: 0 0 0 0.2rem rgba(211, 47, 47, 0.15);
 }
 
-.permission-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 16px;
+.permission-page .form-check-input:checked {
+  background-color: #d32f2f;
+  border-color: #d32f2f;
 }
 
-.permission-table th,
-.permission-table td {
-  border: 1px solid #ddd;
-  padding: 8px 12px;
-  text-align: left;
+/* --- Table header in brand red instead of Bootstrap blue --- */
+.permission-page .table-primary,
+.permission-page .table-primary > th {
+  background-color: #fdecea;
+  color: #9a0007;
+  border-color: #f7c9c5;
 }
 
-.permission-table th {
-  background-color: #f5f5f5;
+.permission-page .table-bordered {
+  border-radius: 12px;
+  overflow: hidden;
 }
 
-.permission-table button {
-  margin-right: 4px;
-  cursor: pointer;
+/* --- Badges --- */
+.permission-page .badge.bg-info {
+  background-color: #ffcdd2 !important;
+  color: #9a0007 !important;
 }
 
-.permission-message {
-  margin-top: 8px;
-  color: #2e7d32;
+.permission-page .badge.text-bg-secondary {
+  background-color: #f4f4f6 !important;
+  color: #4a4f5c !important;
+}
+
+/* --- Primary action button: red gradient, like the login submit button --- */
+.permission-page .btn-primary {
+  background: linear-gradient(180deg, #e53935 0%, #b71c1c 100%);
+  border: none;
+  border-radius: 12px;
+  font-weight: 600;
+  padding: 10px 22px;
+  box-shadow: 0 8px 20px rgba(211, 47, 47, 0.3);
+  transition: opacity 0.15s ease, transform 0.1s ease;
+}
+
+.permission-page .btn-primary:hover,
+.permission-page .btn-primary:focus {
+  background: linear-gradient(180deg, #e53935 0%, #b71c1c 100%);
+  opacity: 0.94;
+}
+
+.permission-page .btn-primary:active {
+  transform: translateY(1px);
+}
+
+.permission-page .btn-primary:disabled {
+  opacity: 0.7;
+}
+
+/* --- Up/down move buttons --- */
+.permission-page .btn-outline-secondary {
+  border-radius: 8px;
+  border-color: #e1e4ea;
+  color: #4a4f5c;
+}
+
+.permission-page .btn-outline-secondary:hover {
+  background-color: #fdecea;
+  border-color: #f7c9c5;
+  color: #9a0007;
 }
