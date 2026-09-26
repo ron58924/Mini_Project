@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import Swal from "sweetalert2";
 import "bootstrap/dist/css/bootstrap.min.css";
+import "./Driver.css";
 import Navbar from "./Navbar";
 
 const API_URL = "http://localhost:5000/api";
@@ -159,7 +160,7 @@ function Driver() {
   return (
     <>
       <Navbar />
-      <div className="container-fluid py-3 px-3" style={{ fontFamily: "'Prompt', sans-serif", backgroundColor: "#f8f9fa", minHeight: "100vh", paddingBottom: "80px" }}>
+      <div className="driver-page container-fluid py-3 px-3">
         <h4 className="fw-bold text-dark mb-3">ระบบคนขับรถ</h4>
 
         {/* 1. เลือกรอบรถ (เปลี่ยนจาก Dropdown เป็นปุ่มการ์ดให้กดง่ายๆ) */}
@@ -176,7 +177,6 @@ function Driver() {
                   key={sch.schedule_code}
                   className={`btn text-start p-3 rounded-4 shadow-sm fw-bold border-0 ${selectedSchedule === sch.schedule_code ? 'btn-primary' : 'bg-white text-dark'}`}
                   onClick={() => setSelectedSchedule(sch.schedule_code)}
-                  style={{ transition: "0.2s" }}
                 >
                   <div className="d-flex justify-content-between align-items-center">
                     <span>เวลา {sch.start_time} - {sch.route_name}</span>
@@ -193,23 +193,9 @@ function Driver() {
           <div className="card shadow-sm border-0 mb-4 rounded-4 border-start border-primary border-4">
             <div className="card-body p-3">
               <h5 className="fw-bold text-dark mb-3">📍 เส้นทางการเดินรถ</h5>
-              
-              {/* ปุ่มกดไปสถานีถัดไป (ปุ่มเดียวใหญ่ๆ) */}
-              {nextStop ? (
-                <button 
-                  className="btn btn-primary w-100 rounded-pill fw-bold py-3 mb-4 shadow-sm fs-5"
-                  onClick={() => handleArriveAtStop(nextStop.log_code, nextStop.stop_name)}
-                >
-                  มุ่งหน้าไป: {nextStop.stop_name} (กดเมื่อถึง)
-                </button>
-              ) : (
-                <div className="alert alert-success text-center fw-bold rounded-4 mb-4">
-                  🎉 รถเดินทางถึงปลายทางเรียบร้อยแล้ว
-                </div>
-              )}
-              
+
               {/* แสดงสถานะว่าผ่านป้ายไหนมาแล้วบ้าง */}
-              <div className="d-flex flex-column gap-2">
+              <div className="d-flex flex-column gap-2 mb-4">
                 {tripLogs.map((log) => {
                   const isArrived = log.actual_time !== null;
                   const isNext = nextStop && nextStop.log_code === log.log_code;
@@ -224,7 +210,7 @@ function Driver() {
                           <h6 className={`mb-0 fw-bold ${isArrived ? 'text-muted text-decoration-line-through' : isNext ? 'text-primary' : 'text-dark'}`}>
                             {log.stop_name}
                           </h6>
-                          <small className="text-muted">คาดว่าถึง: {log.expected_time}</small>
+                          <span className="driver-eta-text">คาดว่าถึง <strong>{log.expected_time}</strong></span>
                         </div>
                       </div>
 
@@ -232,7 +218,7 @@ function Driver() {
                         {isArrived ? (
                           <span className="badge bg-success bg-opacity-10 text-success border border-success px-2 py-1">ถึงแล้ว {log.actual_time}</span>
                         ) : isNext ? (
-                          <span className="badge bg-primary px-3 py-1 animate-pulse">กำลังมุ่งหน้า</span>
+                          <span className="badge bg-primary px-3 py-1">กำลังมุ่งหน้า</span>
                         ) : (
                           <span className="badge bg-light text-muted border px-3 py-1">รอคิว</span>
                         )}
@@ -241,6 +227,20 @@ function Driver() {
                   );
                 })}
               </div>
+
+              {/* ปุ่มกดไปสถานีถัดไป (ปุ่มเดียวใหญ่ๆ) เลื่อนมาไว้ด้านล่างสุดของรายการจุดจอด */}
+              {nextStop ? (
+                <button 
+                  className="btn btn-primary w-100 rounded-pill fw-bold py-3 shadow-sm fs-5"
+                  onClick={() => handleArriveAtStop(nextStop.log_code, nextStop.stop_name)}
+                >
+                  มุ่งหน้าไป: {nextStop.stop_name} (กดเมื่อถึง)
+                </button>
+              ) : (
+                <div className="alert alert-success text-center fw-bold rounded-4 mb-0">
+                  🎉 รถเดินทางถึงปลายทางเรียบร้อยแล้ว
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -249,11 +249,10 @@ function Driver() {
         {selectedSchedule && (
           <div className="mb-3">
             <div 
-              className="d-flex justify-content-between align-items-center bg-white p-3 rounded-4 shadow-sm mb-3"
+              className="driver-passenger-toggle d-flex justify-content-between align-items-center bg-white p-3 rounded-4 shadow-sm mb-3"
               onClick={() => setIsPassengerListOpen(!isPassengerListOpen)}
-              style={{ cursor: "pointer", borderLeft: "4px solid #9a0007" }}
             >
-              <h5 className="mb-0 fw-bold" style={{ color: "#9a0007" }}>
+              <h5 className="mb-0 fw-bold driver-passenger-title">
                 รายชื่อผู้โดยสารในรอบนี้ {isPassengerListOpen ? "▼" : "▶"}
               </h5>
               <span className="badge bg-primary rounded-pill px-3 py-2">ยอดรวม {passengers.length} คน</span>
@@ -299,8 +298,7 @@ function Driver() {
         {/* ปุ่มจำลองสแกน */}
         {selectedSchedule && !isScanning && (
           <button 
-            className="btn btn-dark shadow-lg rounded-pill fw-bold"
-            style={{ position: "fixed", bottom: "30px", left: "50%", transform: "translateX(-50%)", zIndex: 1000, padding: "12px 30px", fontSize: "1.1rem", whiteSpace: "nowrap" }}
+            className="driver-scan-btn btn btn-dark shadow-lg rounded-pill fw-bold"
             onClick={() => setIsScanning(true)}
           >
             📷 สแกน QR (จำลอง)
