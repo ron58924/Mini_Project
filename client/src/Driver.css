@@ -1,0 +1,86 @@
+@import url("https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap");
+
+/* ================= MUT Shuttle Bus theme (matches Login/Permission/Passenger/Navbar) ================= */
+.driver-page {
+  font-family: "Prompt", sans-serif;
+  background-color: #f8f9fa;
+  min-height: 100vh;
+  padding-bottom: 80px;
+}
+
+.driver-page h4,
+.driver-page h5,
+.driver-page h6 {
+  font-family: "Prompt", sans-serif;
+}
+
+/* --- แทนที่สีฟ้า Bootstrap ด้วยธีมแดง --- */
+.driver-page .text-primary {
+  color: #d32f2f !important;
+}
+
+.driver-page .border-primary {
+  border-color: #d32f2f !important;
+}
+
+.driver-page .btn-primary {
+  background: linear-gradient(180deg, #e53935 0%, #b71c1c 100%);
+  border: none;
+  box-shadow: 0 6px 16px rgba(211, 47, 47, 0.3);
+}
+
+.driver-page .btn-primary:hover,
+.driver-page .btn-primary:focus {
+  background: linear-gradient(180deg, #e53935 0%, #b71c1c 100%);
+  opacity: 0.94;
+}
+
+.driver-page .badge.bg-primary {
+  background-color: #d32f2f !important;
+}
+
+.driver-page .spinner-border.text-primary {
+  color: #d32f2f !important;
+}
+
+/* --- การ์ดเลือกรอบรถ / เส้นทาง --- */
+.driver-page .card {
+  border-radius: 16px;
+}
+
+/* --- ตัวอักษรเวลา: จุดที่อ่านยากเดิม ปรับให้ชัดขึ้น --- */
+.driver-eta-text {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: 0.95rem;
+  color: #4a4f5c;
+  font-weight: 500;
+}
+
+.driver-eta-text strong {
+  color: #1a1d29;
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+/* --- แถบหัวข้อรายชื่อผู้โดยสาร (กดเปิด/ปิดได้) --- */
+.driver-passenger-toggle {
+  cursor: pointer;
+  border-left: 4px solid #9a0007;
+}
+
+.driver-passenger-title {
+  color: #9a0007;
+}
+
+/* --- ปุ่มสแกน QR ลอยด้านล่าง --- */
+.driver-scan-btn {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  padding: 12px 30px;
+  font-size: 1.1rem;
+  white-space: nowrap;
+}

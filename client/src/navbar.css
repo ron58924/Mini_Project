@@ -1,70 +1,132 @@
 @import url("https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap");
 
-/* ================= MUT Shuttle Bus theme (matches Login.css / Permission.css) ================= */
+/* ================= MUT Shuttle Bus Theme ================= */
 .navbar {
   font-family: "Prompt", sans-serif;
 }
 
-/* Override Bootstrap's bg-primary with the brand red gradient */
+/* Red Gradient Background */
 .navbar.bg-primary {
   background: linear-gradient(150deg, #d32f2f 0%, #9a0007 100%) !important;
   box-shadow: 0 4px 16px rgba(154, 0, 7, 0.25);
 }
 
+/* Brand Logo Styling */
 .navbar-brand {
   font-weight: 700;
   letter-spacing: -0.3px;
+  text-decoration: none;
 }
 
 .navbar-brand-stacked {
   display: flex;
-  flex-direction: column;
   line-height: 1.1;
 }
 
 .navbar-brand-mut,
 .navbar-brand-sub {
+  display: block;
   font-weight: 700;
+  color: #ffffff;
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
 }
 
 .navbar-brand-mut {
-  font-size: 1.4rem;
+  font-size: 1.3rem;
   letter-spacing: 0.5px;
 }
 
 .navbar-brand-sub {
-  font-size: 0.95rem;
+  font-size: 0.85rem;
 }
 
-.navbar .nav-link {
-  font-weight: 500;
+/* Icon + Label Links */
+.nav-link-icon {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px !important;
+  border-radius: 10px;
+  margin: 2px 4px;
+  text-decoration: none;
   color: rgba(255, 255, 255, 0.88) !important;
-  transition: color 0.2s ease;
+  font-weight: 500;
+  border: 1.5px solid transparent;
+  transition: all 0.2s ease;
 }
 
-.navbar .nav-link:hover {
+.nav-link-icon:hover {
   color: #ffffff !important;
 }
 
-/* Login button (when logged out) matches the login submit button */
+/* Active Highlight Filter */
+.nav-link-icon.active-pill {
+  background-color: transparent;
+  color: #ffffff !important;
+  font-weight: 600;
+  border: 1.5px solid rgba(255, 255, 255, 0.65);
+}
+
+.nav-link-icon:active {
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.12);
+}
+
+/* User Label */
+.user-label {
+  font-size: 0.85rem;
+  line-height: 1.25;
+  text-align: right;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+/* Buttons Styling */
 .navbar .btn-primary {
   background: linear-gradient(180deg, #e53935 0%, #b71c1c 100%);
   border: none;
   border-radius: 10px;
   font-weight: 600;
+  padding: 6px 16px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
 .navbar .btn-primary:hover {
   opacity: 0.94;
 }
 
-/* Logout button */
 .navbar .btn-outline-light {
   border-radius: 10px;
   font-weight: 500;
+  border-color: rgba(255, 255, 255, 0.5);
+  padding: 6px 14px;
 }
 
 .navbar .btn-outline-light:hover {
-  background-color: rgba(255, 255, 255, 0.15);
+  background-color: rgba(255, 255, 255, 0.18);
+  border-color: #ffffff;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 991.98px) {
+  .navbar-collapse {
+    padding-top: 14px;
+    padding-bottom: 8px;
+  }
+
+  .nav-link-icon {
+    margin: 4px 0;
+    padding: 10px 14px !important;
+  }
+
+  .user-label {
+    text-align: left !important;
+  }
+
+  .d-flex.align-items-center.text-white {
+    flex-direction: column;
+    align-items: flex-start !important;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    margin-top: 10px;
+  }
 }
