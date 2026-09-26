@@ -930,3 +930,140 @@ app.put("/api/driver/trip-logs/:log_code/arrive", async (req, res) => {
     if (connection) await connection.close();
   }
 });
+
+// ==========================================
+// Booking API (สำหรับผู้โดยสารจองตั๋ว)
+// ==========================================
+
+// 1. ดึงข้อมูลเส้นทางทั้งหมด
+app.get('/api/booking/routes', async (req, res) => {
+  let connection;
+  try {
+    connection = await getConnection();
+    const result = await connection.execute(
+      `SELECT route_code, route_name FROM routes ORDER BY route_code`
+    );
+    const routes = result.rows.map((row) => ({
+      route_code: row[0],
+      route_name: row[1],
+    }));
+    res.json(routes);
+  } catch (error) {
+    res.status(500).json({ message: "Cannot get routes", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
+// 2. ดึงข้อมูลจุดขึ้น-ลงรถ โดยทำการ Map การอ้างอิงตำแหน่งเข้ากับรายละเอียดเส้นทางโดยตรง
+app.get('/api/booking/routes/:routeCode/stops', async (req, res) => {
+  let connection;
+  try {
+    const { routeCode } = req.params;
+    connection = await getConnection();
+    const result = await connection.execute(
+      `SELECT rd.stop_code, s.stop_name, rd.stop_order 
+       FROM route_details rd
+       JOIN stations s ON rd.stop_code = s.stop_code
+       WHERE rd.route_code = :routeCode
+       ORDER BY rd.stop_order`,
+      { routeCode }
+    );
+    const stops = result.rows.map((row) => ({
+      stop_code: row[0],
+      stop_name: row[1],
+      stop_order: row[2],
+    }));
+    res.json(stops);
+  } catch (error) {
+    res.status(500).json({ message: "Cannot get stops", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
+// 3. ดึงรอบการเดินรถตามเส้นทาง
+app.get('/api/booking/schedules/:routeCode', async (req, res) => {
+  let connection;
+  try {
+    const { routeCode } = req.params;
+    connection = await getConnection();
+    const result = await connection.execute(
+      `SELECT schedule_code, start_time 
+       FROM schedules 
+       WHERE route_code = :routeCode 
+       ORDER BY start_time`,
+      { routeCode }
+    );
+    const schedules = result.rows.map((row) => ({
+      schedule_code: row[0],
+      start_time: row[1],
+    }));
+    res.json(schedules);
+  } catch (error) {
+    res.status(500).json({ message: "Cannot get schedules", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
+// ==========================================
+// 4. บันทึกการจองใหม่ (แก้ไขคอลัมน์ให้ตรงกับ DB)
+// ==========================================
+app.post('/api/bookings/create', async (req, res) => {
+    const { user_code, schedule_code, pickup_order, dropoff_order, passenger_count } = req.body;
+    let connection;
+    try {
+        connection = await getConnection();
+        
+        // ใช้ ROW_NUMBER() เพื่อเรียงลำดับ trip_logs ตามเวลา และหา log_code ที่ตรงกับลำดับป้ายที่ส่งมา
+        const logResult = await connection.execute(
+            `WITH OrderedLogs AS (
+                SELECT log_code, 
+                       ROW_NUMBER() OVER (ORDER BY expected_timestamp ASC) as stop_order
+                FROM trip_logs
+                WHERE schedule_code = :schedule_code
+             )
+             SELECT log_code, stop_order FROM OrderedLogs 
+             WHERE stop_order IN (:pickup, :dropoff)`,
+            {
+                schedule_code: schedule_code,
+                pickup: pickup_order,
+                dropoff: dropoff_order
+            },
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+
+        const pickupLog = logResult.rows.find(row => row.STOP_ORDER === pickup_order);
+        const dropoffLog = logResult.rows.find(row => row.STOP_ORDER === dropoff_order);
+
+        if (!pickupLog || !dropoffLog) {
+            return res.status(400).json({ message: 'ไม่พบข้อมูลจุดจอดในรอบการเดินรถนี้' });
+        }
+
+        const bookingCode = 'BK' + Date.now().toString().slice(-8);
+        const qrCode = `QR_${bookingCode}`;
+
+        await connection.execute(
+            `INSERT INTO bookings 
+             (booking_code, user_code, pickup_log_code, dropoff_log_code, passenger_count, travel_date, booking_timestamp, status, qr_code)
+             VALUES (:booking_code, :user_code, :pickup_log, :dropoff_log, :count, TRUNC(SYSDATE), SYSTIMESTAMP, 'ACTIVE', :qr_code)`,
+            {
+                booking_code: bookingCode,
+                user_code: user_code,
+                pickup_log: pickupLog.LOG_CODE,
+                dropoff_log: dropoffLog.LOG_CODE,
+                count: passenger_count,
+                qr_code: qrCode
+            },
+            { autoCommit: true }
+        );
+
+        res.status(201).json({ message: 'จองสำเร็จ', booking_code: bookingCode, qr_code: qrCode });
+    } catch (err) {
+        console.error("Booking Error:", err);
+        res.status(500).json({ message: 'Cannot create booking', error: err.message });
+    } finally {
+        if (connection) await connection.close();
+    }
+});

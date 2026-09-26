@@ -15,7 +15,7 @@ import Permission from "./Permission";
 import ProtectedRoute from "./ProtectedRoute";
 import Report from "./Report"; 
 import Driver from "./Driver";
-
+import Booking from "./Booking";
 
 const router = createBrowserRouter([
   {
@@ -74,6 +74,16 @@ const router = createBrowserRouter([
     element: (
       <ProtectedRoute requiredScreenCode="S05">
         <Driver />
+      </ProtectedRoute>
+    ),
+  },
+
+  {
+   
+    path: "/booking",
+    element: (
+      <ProtectedRoute requiredScreenCode="S06">
+        <Booking />
       </ProtectedRoute>
     ),
   },
