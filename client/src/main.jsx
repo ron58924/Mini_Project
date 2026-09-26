@@ -17,6 +17,9 @@ import Report from "./Report";
 import Driver from "./Driver";
 import Booking from "./Booking";
 
+// 1. Import AuthProvider เข้ามา
+import { AuthProvider } from "./context/AuthContext";
+
 const router = createBrowserRouter([
   {
     path: "/",
@@ -26,14 +29,11 @@ const router = createBrowserRouter([
     path: "/login",
     element: <Login />,
   },
- 
   {
     path: "/register",
     element: <Register />,
   },
   {
-    // สมมติว่าหน้า Employee ของคุณใช้จัดการพนักงาน ซึ่งเทียบเท่ากับ Profile หรือ Dashboard ในตาราง
-    // คุณก็เลือกรหัสที่ตรงกันมาใส่ (ตัวอย่างนี้ขอสมมติเป็น S04 - Profile)
     path: "/employee",
     element: (
       <ProtectedRoute requiredScreenCode="S01">
@@ -41,7 +41,6 @@ const router = createBrowserRouter([
       </ProtectedRoute>
     ),
   },
-
   {
     path: "/passenger",
     element: (
@@ -51,7 +50,6 @@ const router = createBrowserRouter([
     ),
   },
   {
-    // หน้าจัดการสิทธิ์ (Permission) - ปรับ requiredScreenCode ให้ตรงกับรหัสจริงใน screens table
     path: "/permission",
     element: (
       <ProtectedRoute requiredScreenCode="S03">
@@ -60,7 +58,6 @@ const router = createBrowserRouter([
     ),
   },
   {
-    // หน้าจัดการสิทธิ์ (Permission) - ปรับ requiredScreenCode ให้ตรงกับรหัสจริงใน screens table
     path: "/report",
     element: (
       <ProtectedRoute requiredScreenCode="S04">
@@ -68,8 +65,7 @@ const router = createBrowserRouter([
       </ProtectedRoute>
     ),
   },
-   {
-   
+  {
     path: "/driver",
     element: (
       <ProtectedRoute requiredScreenCode="S05">
@@ -77,9 +73,7 @@ const router = createBrowserRouter([
       </ProtectedRoute>
     ),
   },
-
   {
-   
     path: "/booking",
     element: (
       <ProtectedRoute requiredScreenCode="S06">
@@ -98,7 +92,10 @@ const rootElement = document.getElementById("root");
 if (rootElement) {
   ReactDOM.createRoot(rootElement).render(
     <React.StrictMode>
-      <RouterProvider router={router} />
+      {/* 2. นำ AuthProvider มาครอบ RouterProvider */}
+      <AuthProvider>
+        <RouterProvider router={router} />
+      </AuthProvider>
     </React.StrictMode>
   );
 }

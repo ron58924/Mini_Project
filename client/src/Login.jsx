@@ -3,9 +3,10 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import { useNavigate } from "react-router-dom";
 import "./Login.css";
+import { useAuth } from "./context/AuthContext";
 
 // ==========================================
-// SVG Icons Components
+// SVG Icons Components (เหมือนเดิม)
 // ==========================================
 function UserIcon() {
   return (
@@ -76,6 +77,9 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
+  
+  // เพิ่มเข้ามาใหม่: ดึงฟังก์ชัน login จาก Context
+  const { login } = useAuth(); 
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -98,8 +102,8 @@ export default function Login() {
         password: password,
       });
 
-      // บันทึกข้อมูล Session
-      localStorage.setItem("user", JSON.stringify(response.data.user));
+      // แก้ไขตรงนี้: เรียกใช้ฟังก์ชัน login จาก Context แทนการเขียน localStorage ตรงๆ
+      login(response.data.user);
 
       if (rememberMe) {
         localStorage.setItem("rememberEmail", email);
@@ -115,7 +119,8 @@ export default function Login() {
       });
 
       navigate("/");
-      window.location.reload();
+      // แก้ไขตรงนี้: ลบ window.location.reload(); ออก เพราะ Context จะอัปเดต UI ให้ทันที
+      
     } catch (error) {
       Swal.fire({
         icon: "error",
@@ -147,8 +152,6 @@ export default function Login() {
           <div className="shape shape-8"></div>
           <div className="shape shape-9"></div>
         
-         
-
           <div className="brand-content">
             <h1 className="brand-title">
               <span className="brand-mut">MUT</span>
