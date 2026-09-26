@@ -5,6 +5,7 @@ import {
   RouterProvider,
   Navigate,
 } from "react-router-dom";
+import "bootstrap/dist/js/bootstrap.bundle.min.js";
 import Home from "./Home";
 import Employee from "./Employee";
 import Passenger from "./Passenger";
@@ -13,7 +14,8 @@ import Register from "./Register";
 import Permission from "./Permission";
 import ProtectedRoute from "./ProtectedRoute";
 import Report from "./Report"; 
-import Driver from "./Driver"; 
+import Driver from "./Driver";
+
 
 const router = createBrowserRouter([
   {
