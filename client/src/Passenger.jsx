@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import Swal from "sweetalert2";
 import Navbar from "./Navbar";
+import "./Passenger.css";
 
 // ชุดคำแปลชื่อคณะ (อ้างอิงจากข้อมูลใน Database)
 const facultyTranslations = {
@@ -14,6 +15,9 @@ const facultyTranslations = {
 function Passenger() {
   const [passengers, setPassengers] = useState([]);
   const [deptOptions, setDeptOptions] = useState([]); // State สำหรับเก็บตัวเลือกคณะ
+
+  const [searchTerm, setSearchTerm] = useState(""); // ค้นหาจากชื่อ/นามสกุล
+  const [filterDept, setFilterDept] = useState(""); // กรองตามคณะ
   
   const [formData, setFormData] = useState({
     user_code: "", first_name: "", last_name: "", email: "", 
@@ -113,10 +117,24 @@ function Passenger() {
     }
   };
 
+  // กรองรายชื่อผู้โดยสารตามคำค้นหา (ชื่อ/นามสกุล) และคณะที่เลือก
+  const filteredPassengers = passengers.filter((user) => {
+    const keyword = searchTerm.trim().toLowerCase();
+    const matchSearch =
+      keyword === "" ||
+      user.first_name?.toLowerCase().includes(keyword) ||
+      user.last_name?.toLowerCase().includes(keyword) ||
+      user.username?.toLowerCase().includes(keyword);
+
+    const matchDept = filterDept === "" || user.dept_code === filterDept;
+
+    return matchSearch && matchDept;
+  });
+
   return (
     <>
       <Navbar />
-      <div className="container mt-4">
+      <div className="passenger-page container mt-4">
         
         {/* Header และปุ่มเปิด Modal */}
         <div className="d-flex justify-content-between align-items-center mb-4">
@@ -124,6 +142,36 @@ function Passenger() {
           <button className="btn btn-primary" onClick={handleAddClick}>
             + เพิ่มผู้โดยสาร
           </button>
+        </div>
+
+        {/* ช่องค้นหาชื่อ/นามสกุล + ตัวกรองคณะ */}
+        <div className="row g-2 mb-3">
+          <div className="col-md-6">
+            <input
+              type="text"
+              className="form-control"
+              placeholder="ค้นหาชื่อ, นามสกุล หรือ Username..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="col-md-6">
+            <select
+              className="form-select"
+              value={filterDept}
+              onChange={(e) => setFilterDept(e.target.value)}
+            >
+              <option value="">-- ทุกคณะ --</option>
+              {deptOptions.map((dept) => {
+                const thaiName = facultyTranslations[dept.dept_name] || dept.dept_name;
+                return (
+                  <option key={dept.dept_code} value={dept.dept_code}>
+                    {thaiName}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
         </div>
 
         {/* ตารางแสดงข้อมูลผู้โดยสาร */}
@@ -140,8 +188,8 @@ function Passenger() {
               </tr>
             </thead>
             <tbody>
-              {passengers.length > 0 ? (
-                passengers.map((user) => {
+              {filteredPassengers.length > 0 ? (
+                filteredPassengers.map((user) => {
                   const displayDeptName = facultyTranslations[user.dept_name] || user.dept_name || "-";
                   return (
                     <tr key={user.user_code}>
@@ -159,7 +207,7 @@ function Passenger() {
                 })
               ) : (
                 <tr>
-                  <td colSpan="6" className="text-center py-4 text-muted">ไม่พบข้อมูลผู้โดยสาร</td>
+                  <td colSpan="6" className="text-center py-4 text-muted">ไม่พบข้อมูลผู้โดยสารที่ตรงกับเงื่อนไข</td>
                 </tr>
               )}
             </tbody>
