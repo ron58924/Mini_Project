@@ -11,12 +11,14 @@ function Driver() {
   const [selectedSchedule, setSelectedSchedule] = useState("");
   const [passengers, setPassengers] = useState([]);
   
-  // เพิ่ม State สำหรับเก็บข้อมูลป้ายจอดรถ
   const [tripLogs, setTripLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   
   const [isScanning, setIsScanning] = useState(false);
   const [fakeQrText, setFakeQrText] = useState("");
+
+  // State สำหรับเปิด-ปิดการแสดงผลรายชื่อผู้โดยสาร
+  const [isPassengerListOpen, setIsPassengerListOpen] = useState(true);
 
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
 
@@ -29,8 +31,9 @@ function Driver() {
   useEffect(() => {
     if (selectedSchedule) {
       fetchPassengers(selectedSchedule);
-      fetchTripLogs(selectedSchedule); // เรียกดึงข้อมูลป้ายจอดเมื่อเลือกรอบรถ
+      fetchTripLogs(selectedSchedule);
       setIsScanning(false);
+      setIsPassengerListOpen(true); // กางรายชื่อผู้โดยสารอัตโนมัติเมื่อเลือกรอบใหม่
     } else {
       setPassengers([]);
       setTripLogs([]);
@@ -62,7 +65,6 @@ function Driver() {
     }
   };
 
-  // ดึงข้อมูลจุดจอดตามลำดับ
   const fetchTripLogs = async (scheduleCode) => {
     try {
       const response = await axios.get(`${API_URL}/driver/trip-logs`, {
@@ -93,13 +95,10 @@ function Driver() {
     }
   };
 
-  // ==========================================
-  // ฟังก์ชันอัปเดตเมื่อขับรถถึงป้ายจอดแล้ว
-  // ==========================================
   const handleArriveAtStop = async (logCode, stopName) => {
     const confirm = await Swal.fire({
       title: `ถึง ${stopName}?`,
-      text: "ยืนยันว่ารถได้เดินทางมาถึงป้ายนี้แล้ว",
+      text: "ยืนยันว่ารถเดินทางมาถึงป้ายนี้แล้ว",
       icon: "question",
       showCancelButton: true,
       confirmButtonText: "ยืนยัน",
@@ -110,7 +109,7 @@ function Driver() {
     if (confirm.isConfirmed) {
       try {
         await axios.put(`${API_URL}/driver/trip-logs/${logCode}/arrive`);
-        fetchTripLogs(selectedSchedule); // รีเฟรชข้อมูลป้ายจอด
+        fetchTripLogs(selectedSchedule); 
         Swal.fire({ icon: "success", title: "บันทึกเวลาถึงป้ายสำเร็จ", timer: 1000, showConfirmButton: false });
       } catch (error) {
         Swal.fire({ icon: "error", title: "เกิดข้อผิดพลาด", text: "ไม่สามารถบันทึกเวลาได้" });
@@ -154,30 +153,39 @@ function Driver() {
     }
   };
 
+  // หาจุดจอดถัดไปที่ยังไปไม่ถึง (เพื่อปั้นเป็นปุ่มกดอันเดียว)
+  const nextStop = tripLogs.find(log => log.actual_time === null);
+
   return (
     <>
       <Navbar />
       <div className="container-fluid py-3 px-3" style={{ fontFamily: "'Prompt', sans-serif", backgroundColor: "#f8f9fa", minHeight: "100vh", paddingBottom: "80px" }}>
         <h4 className="fw-bold text-dark mb-3">ระบบคนขับรถ</h4>
 
-        {/* 1. เลือกรอบรถ */}
-        <div className="card shadow-sm border-0 mb-3 rounded-4">
-          <div className="card-body p-3">
-            <label className="form-label fw-bold text-primary mb-2">รอบรถของคุณ (วันนี้)</label>
-            <select 
-              className="form-select form-select-lg border-primary shadow-none"
-              value={selectedSchedule}
-              onChange={(e) => setSelectedSchedule(e.target.value)}
-              style={{ fontSize: "1rem" }}
-            >
-              <option value="">-- กรุณาเลือกรอบรถ --</option>
+        {/* 1. เลือกรอบรถ (เปลี่ยนจาก Dropdown เป็นปุ่มการ์ดให้กดง่ายๆ) */}
+        <div className="mb-4">
+          <label className="form-label fw-bold text-primary mb-2">รอบรถของคุณ (วันนี้)</label>
+          {schedules.length === 0 ? (
+            <div className="alert alert-light text-muted border text-center rounded-4">
+              ไม่มีรอบการเดินรถที่ได้รับมอบหมายในวันนี้
+            </div>
+          ) : (
+            <div className="d-flex flex-column gap-2">
               {schedules.map((sch) => (
-                <option key={sch.schedule_code} value={sch.schedule_code}>
-                  เวลา {sch.start_time} - {sch.route_name}
-                </option>
+                <button 
+                  key={sch.schedule_code}
+                  className={`btn text-start p-3 rounded-4 shadow-sm fw-bold border-0 ${selectedSchedule === sch.schedule_code ? 'btn-primary' : 'bg-white text-dark'}`}
+                  onClick={() => setSelectedSchedule(sch.schedule_code)}
+                  style={{ transition: "0.2s" }}
+                >
+                  <div className="d-flex justify-content-between align-items-center">
+                    <span>เวลา {sch.start_time} - {sch.route_name}</span>
+                    {selectedSchedule === sch.schedule_code && <span>✅</span>}
+                  </div>
+                </button>
               ))}
-            </select>
-          </div>
+            </div>
+          )}
         </div>
 
         {/* 2. สถานะการเดินทาง (จุดจอด) */}
@@ -186,20 +194,34 @@ function Driver() {
             <div className="card-body p-3">
               <h5 className="fw-bold text-dark mb-3">📍 เส้นทางการเดินรถ</h5>
               
+              {/* ปุ่มกดไปสถานีถัดไป (ปุ่มเดียวใหญ่ๆ) */}
+              {nextStop ? (
+                <button 
+                  className="btn btn-primary w-100 rounded-pill fw-bold py-3 mb-4 shadow-sm fs-5"
+                  onClick={() => handleArriveAtStop(nextStop.log_code, nextStop.stop_name)}
+                >
+                  มุ่งหน้าไป: {nextStop.stop_name} (กดเมื่อถึง)
+                </button>
+              ) : (
+                <div className="alert alert-success text-center fw-bold rounded-4 mb-4">
+                  🎉 รถเดินทางถึงปลายทางเรียบร้อยแล้ว
+                </div>
+              )}
+              
+              {/* แสดงสถานะว่าผ่านป้ายไหนมาแล้วบ้าง */}
               <div className="d-flex flex-column gap-2">
-                {tripLogs.map((log, index) => {
-                  // เช็คว่าป้ายก่อนหน้าถึงหรือยัง (ถ้าป้ายแรกให้กดได้เลย)
-                  const isPreviousStopArrived = index === 0 || tripLogs[index - 1].actual_time !== null;
+                {tripLogs.map((log) => {
                   const isArrived = log.actual_time !== null;
+                  const isNext = nextStop && nextStop.log_code === log.log_code;
 
                   return (
-                    <div key={log.log_code} className="d-flex align-items-center justify-content-between p-2 rounded-3 bg-white border">
+                    <div key={log.log_code} className={`d-flex align-items-center justify-content-between p-2 rounded-3 border ${isNext ? 'bg-light border-primary border-2' : 'bg-white'}`}>
                       <div className="d-flex align-items-center">
                         <div className="me-3 text-center fs-5">
-                          {isArrived ? "✅" : "📌"}
+                          {isArrived ? "✅" : isNext ? "🚌" : "📌"}
                         </div>
                         <div>
-                          <h6 className={`mb-0 fw-bold ${isArrived ? 'text-muted text-decoration-line-through' : 'text-primary'}`}>
+                          <h6 className={`mb-0 fw-bold ${isArrived ? 'text-muted text-decoration-line-through' : isNext ? 'text-primary' : 'text-dark'}`}>
                             {log.stop_name}
                           </h6>
                           <small className="text-muted">คาดว่าถึง: {log.expected_time}</small>
@@ -208,14 +230,9 @@ function Driver() {
 
                       <div>
                         {isArrived ? (
-                          <span className="badge bg-light text-success border px-2 py-1">ถึงแล้ว {log.actual_time}</span>
-                        ) : isPreviousStopArrived ? (
-                          <button 
-                            className="btn btn-sm btn-primary rounded-pill fw-bold px-3 shadow-sm"
-                            onClick={() => handleArriveAtStop(log.log_code, log.stop_name)}
-                          >
-                            ถึงป้ายนี้
-                          </button>
+                          <span className="badge bg-success bg-opacity-10 text-success border border-success px-2 py-1">ถึงแล้ว {log.actual_time}</span>
+                        ) : isNext ? (
+                          <span className="badge bg-primary px-3 py-1 animate-pulse">กำลังมุ่งหน้า</span>
                         ) : (
                           <span className="badge bg-light text-muted border px-3 py-1">รอคิว</span>
                         )}
@@ -228,49 +245,54 @@ function Driver() {
           </div>
         )}
 
-        {/* 3. รายชื่อผู้โดยสาร */}
-        <div className="d-flex justify-content-between align-items-center mb-3">
-          <h5 className="mb-0 fw-bold" style={{ color: "#9a0007" }}>รายชื่อผู้โดยสาร</h5>
-          {selectedSchedule && (
-            <span className="badge bg-primary rounded-pill px-3 py-2">ยอดรวม {passengers.length} คน</span>
-          )}
-        </div>
+        {/* 3. รายชื่อผู้โดยสาร (เปิด/ปิด ได้) */}
+        {selectedSchedule && (
+          <div className="mb-3">
+            <div 
+              className="d-flex justify-content-between align-items-center bg-white p-3 rounded-4 shadow-sm mb-3"
+              onClick={() => setIsPassengerListOpen(!isPassengerListOpen)}
+              style={{ cursor: "pointer", borderLeft: "4px solid #9a0007" }}
+            >
+              <h5 className="mb-0 fw-bold" style={{ color: "#9a0007" }}>
+                รายชื่อผู้โดยสารในรอบนี้ {isPassengerListOpen ? "▼" : "▶"}
+              </h5>
+              <span className="badge bg-primary rounded-pill px-3 py-2">ยอดรวม {passengers.length} คน</span>
+            </div>
 
-        {!selectedSchedule ? (
-          <div className="text-center py-5">
-            <h1 className="text-muted opacity-50 mb-3">🚌</h1>
-            <p className="text-muted">กรุณาเลือกรอบการเดินรถด้านบน</p>
-          </div>
-        ) : loading ? (
-          <div className="text-center py-5"><div className="spinner-border text-primary" role="status"></div></div>
-        ) : passengers.length === 0 ? (
-          <div className="text-center py-5 bg-white rounded-4 shadow-sm"><p className="text-muted mb-0">ไม่มีผู้โดยสารจองในรอบนี้</p></div>
-        ) : (
-          <div className="d-flex flex-column gap-3 mb-5">
-            {passengers.map((p) => (
-              <div key={p.booking_code} className={`card border-0 shadow-sm rounded-4 ${p.status !== 'ACTIVE' ? 'opacity-75 bg-light' : ''}`}>
-                <div className="card-body p-3">
-                  <div className="d-flex justify-content-between align-items-start mb-3">
-                    <div>
-                      <h5 className="fw-bold mb-1">{p.passenger_name}</h5>
-                      <span className="text-muted small">รหัส: {p.booking_code}</span>
+            {isPassengerListOpen && (
+              loading ? (
+                <div className="text-center py-5"><div className="spinner-border text-primary" role="status"></div></div>
+              ) : passengers.length === 0 ? (
+                <div className="text-center py-4 bg-white rounded-4 shadow-sm"><p className="text-muted mb-0">ไม่มีผู้โดยสารจองในรอบนี้</p></div>
+              ) : (
+                <div className="d-flex flex-column gap-3 mb-5">
+                  {passengers.map((p) => (
+                    <div key={p.booking_code} className={`card border-0 shadow-sm rounded-4 ${p.status !== 'ACTIVE' ? 'opacity-75 bg-light' : ''}`}>
+                      <div className="card-body p-3">
+                        <div className="d-flex justify-content-between align-items-start mb-3">
+                          <div>
+                            <h5 className="fw-bold mb-1">{p.passenger_name}</h5>
+                            <span className="text-muted small">รหัส: {p.booking_code}</span>
+                          </div>
+                          {renderStatusBadge(p.status)}
+                        </div>
+                        
+                        {p.status === 'ACTIVE' && (
+                          <div className="d-flex gap-2 mt-2">
+                            <button className="btn btn-outline-success flex-grow-1 fw-bold py-2 rounded-4" onClick={() => handleUpdateStatus(p.booking_code, 'COMPLETED')}>
+                              ✓ กดเช็คอิน
+                            </button>
+                            <button className="btn btn-outline-secondary flex-grow-1 fw-bold py-2 rounded-4" onClick={() => handleUpdateStatus(p.booking_code, 'NO_SHOW')}>
+                              ✗ ไม่มา
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    {renderStatusBadge(p.status)}
-                  </div>
-                  
-                  {p.status === 'ACTIVE' && (
-                    <div className="d-flex gap-2 mt-2">
-                      <button className="btn btn-outline-success flex-grow-1 fw-bold py-2 rounded-4" onClick={() => handleUpdateStatus(p.booking_code, 'COMPLETED')}>
-                        ✓ กดเช็คอิน
-                      </button>
-                      <button className="btn btn-outline-secondary flex-grow-1 fw-bold py-2 rounded-4" onClick={() => handleUpdateStatus(p.booking_code, 'NO_SHOW')}>
-                        ✗ ไม่มา
-                      </button>
-                    </div>
-                  )}
+                  ))}
                 </div>
-              </div>
-            ))}
+              )
+            )}
           </div>
         )}
 
