@@ -1013,10 +1013,11 @@ app.get('/api/booking/schedules/:routeCode', async (req, res) => {
 app.post('/api/bookings/create', async (req, res) => {
     const { user_code, schedule_code, pickup_order, dropoff_order, passenger_count } = req.body;
     let connection;
+    
     try {
         connection = await getConnection();
         
-        // ใช้ ROW_NUMBER() เพื่อเรียงลำดับ trip_logs ตามเวลา และหา log_code ที่ตรงกับลำดับป้ายที่ส่งมา
+        // ดึง log_code จาก trip_logs โดยเรียงตามเวลาที่คาดว่าจะถึง เพื่อสร้าง Order ให้ตรงกับหน้าจอ
         const logResult = await connection.execute(
             `WITH OrderedLogs AS (
                 SELECT log_code, 
@@ -1034,8 +1035,8 @@ app.post('/api/bookings/create', async (req, res) => {
             { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
 
-        const pickupLog = logResult.rows.find(row => row.STOP_ORDER === pickup_order);
-        const dropoffLog = logResult.rows.find(row => row.STOP_ORDER === dropoff_order);
+        const pickupLog = logResult.rows.find(row => row.STOP_ORDER === parseInt(pickup_order));
+        const dropoffLog = logResult.rows.find(row => row.STOP_ORDER === parseInt(dropoff_order));
 
         if (!pickupLog || !dropoffLog) {
             return res.status(400).json({ message: 'ไม่พบข้อมูลจุดจอดในรอบการเดินรถนี้' });
@@ -1066,4 +1067,100 @@ app.post('/api/bookings/create', async (req, res) => {
     } finally {
         if (connection) await connection.close();
     }
+});
+
+// ==========================================
+// API คำนวณที่นั่งว่าง (Availability - แก้ไขลอจิกลำดับป้ายที่ซ้ำกัน)
+// ==========================================
+app.get('/api/booking/schedules/:routeCode/availability', async (req, res) => {
+  const { routeCode } = req.params;
+  const { pickup_order, dropoff_order, travel_date } = req.query;
+  let connection;
+
+  try {
+    connection = await getConnection();
+
+    const query = `
+      WITH OrderedLogs AS (
+          -- 1. เรียงลำดับป้ายทั้งหมดในรอบนั้นๆ ตามเวลา เพื่อให้ได้ Order ที่แท้จริง
+          SELECT log_code, schedule_code,
+                 ROW_NUMBER() OVER (PARTITION BY schedule_code ORDER BY expected_timestamp ASC) as stop_order
+          FROM trip_logs
+      ),
+      BookingOrders AS (
+          -- 2. ดึงตั๋วที่มีการจองแล้วของวันนี้ และหา Order ของจุดขึ้น-ลงของตั๋วแต่ละใบ
+          SELECT b.booking_code, b.passenger_count,
+                 p.schedule_code,
+                 p.stop_order as pickup_order,
+                 d.stop_order as dropoff_order
+          FROM bookings b
+          JOIN OrderedLogs p ON b.pickup_log_code = p.log_code
+          JOIN OrderedLogs d ON b.dropoff_log_code = d.log_code
+          WHERE b.status IN ('ACTIVE', 'COMPLETED')
+            AND TRUNC(b.travel_date) = TO_DATE(:travel_date, 'YYYY-MM-DD')
+      ),
+      SegmentBounds AS (
+          -- 3. ขอบเขตป้ายที่ผู้ใช้กำลังจะกดจอง
+          SELECT TO_NUMBER(:pickup_order) as p_order, TO_NUMBER(:dropoff_order) as d_order FROM DUAL
+      ),
+      ScheduleUsage AS (
+          SELECT 
+              s.schedule_code,
+              s.start_time,
+              v.capacity,
+              NVL((
+                  -- 4. คำนวณหาจุดที่คนแน่นที่สุด "เฉพาะช่วงป้ายที่ผู้ใช้กำลังจะจอง"
+                  SELECT MAX(passengers_on_board)
+                  FROM (
+                      SELECT segments.check_order, NVL(SUM(bo.passenger_count), 0) as passengers_on_board
+                      FROM (
+                          -- สร้างจำลองลำดับป้ายที่รถวิ่งผ่าน (เช่น จอง 1 ไป 3 จะเช็คป้าย 1, 2)
+                          SELECT (SELECT p_order FROM SegmentBounds) + LEVEL - 1 AS check_order
+                          FROM DUAL
+                          CONNECT BY LEVEL <= (SELECT d_order - p_order FROM SegmentBounds)
+                      ) segments
+                      LEFT JOIN BookingOrders bo 
+                             ON bo.schedule_code = s.schedule_code
+                            AND bo.pickup_order <= segments.check_order
+                            AND bo.dropoff_order > segments.check_order
+                      GROUP BY segments.check_order
+                  )
+              ), 0) AS max_used_seats
+          FROM schedules s
+          JOIN vehicles v ON s.vehicle_code = v.vehicle_code
+          WHERE s.route_code = :routeCode
+      )
+      -- 5. สรุปผลที่นั่งที่เหลืออยู่
+      SELECT 
+          schedule_code, 
+          start_time, 
+          capacity, 
+          max_used_seats,
+          (capacity - max_used_seats) AS available_seats
+      FROM ScheduleUsage
+      ORDER BY start_time ASC
+    `;
+
+    const result = await connection.execute(query, {
+      routeCode,
+      pickup_order,
+      dropoff_order,
+      travel_date: travel_date 
+    });
+
+    const schedules = result.rows.map(row => ({
+      schedule_code: row[0],
+      start_time: row[1],
+      total_capacity: row[2],
+      used_seats: row[3],
+      available_seats: row[4]
+    }));
+
+    res.json(schedules);
+  } catch (error) {
+    console.error("Availability Error:", error);
+    res.status(500).json({ message: "Error calculating availability", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
 });
