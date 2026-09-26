@@ -783,3 +783,150 @@ app.get("/api/reports/user-behavior", async (req, res) => {
     if (connection) await connection.close();
   }
 });
+
+// ==========================================
+// API: Driver Panel
+// ==========================================
+// 1. ดึงรอบรถที่มอบหมายให้คนขับคนนี้ (ดึงเฉพาะของวันนี้)
+app.get("/api/driver/schedules", async (req, res) => {
+  const { driver_code } = req.query;
+  let connection;
+  try {
+    connection = await getConnection();
+    const query = `
+      SELECT s.schedule_code, s.start_time, r.route_name
+      FROM schedules s
+      JOIN routes r ON s.route_code = r.route_code
+      WHERE s.driver_code = :driver_code
+      ORDER BY s.start_time ASC
+    `;
+    const result = await connection.execute(query, { driver_code });
+    const schedules = result.rows.map(row => ({
+      schedule_code: row[0],
+      start_time: row[1],
+      route_name: row[2]
+    }));
+    res.json(schedules);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching schedules", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
+// 2. ดึงรายชื่อผู้โดยสารในรอบรถที่เลือก (JOIN หาจุดขึ้น/ลงรถ)
+app.get("/api/driver/passengers", async (req, res) => {
+  const { schedule_code } = req.query;
+  let connection;
+  try {
+    connection = await getConnection();
+    const query = `
+      SELECT 
+        b.booking_code, 
+        u.first_name || ' ' || u.last_name AS passenger_name,
+        sp.stop_name AS pickup_station,
+        sd.stop_name AS dropoff_station,
+        b.status
+      FROM bookings b
+      JOIN users u ON b.user_code = u.user_code
+      JOIN trip_logs tp ON b.pickup_log_code = tp.log_code
+      JOIN stations sp ON tp.stop_code = sp.stop_code
+      JOIN trip_logs td ON b.dropoff_log_code = td.log_code
+      JOIN stations sd ON td.stop_code = sd.stop_code
+      WHERE tp.schedule_code = :schedule_code 
+      -- ดึงเฉพาะการจองของวันนี้
+      AND TRUNC(b.travel_date) = TRUNC(SYSDATE)
+      ORDER BY tp.expected_timestamp ASC
+    `;
+    const result = await connection.execute(query, { schedule_code });
+    const passengers = result.rows.map(row => ({
+      booking_code: row[0],
+      passenger_name: row[1],
+      pickup_station: row[2],
+      dropoff_station: row[3],
+      status: row[4]
+    }));
+    res.json(passengers);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching passengers", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
+// 3. อัปเดตสถานะผู้โดยสาร (COMPLETED / NO_SHOW)
+app.put("/api/bookings/:booking_code/status", async (req, res) => {
+  const { booking_code } = req.params;
+  const { status } = req.body;
+  let connection;
+  try {
+    connection = await getConnection();
+    await connection.execute(
+      `UPDATE bookings SET status = :status WHERE booking_code = :booking_code`,
+      { status, booking_code },
+      { autoCommit: true }
+    );
+    res.json({ message: "Status updated successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Error updating status", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+// ==========================================
+// 4. ดึงข้อมูลจุดจอด (Trip Logs) 
+// ==========================================
+app.get("/api/driver/trip-logs", async (req, res) => {
+  const { schedule_code } = req.query;
+  let connection;
+  try {
+    connection = await getConnection();
+    const query = `
+      SELECT 
+        t.log_code, 
+        s.stop_name, 
+        TO_CHAR(t.expected_timestamp, 'HH24:MI:SS') AS expected_time, 
+        TO_CHAR(t.actual_timestamp, 'HH24:MI:SS') AS actual_time
+      FROM trip_logs t
+      JOIN stations s ON t.stop_code = s.stop_code
+      WHERE t.schedule_code = :schedule_code
+      ORDER BY t.expected_timestamp ASC
+    `;
+    const result = await connection.execute(query, { schedule_code });
+    const logs = result.rows.map(row => ({
+      log_code: row[0],
+      stop_name: row[1],
+      expected_time: row[2],
+      actual_time: row[3] // ถ้าระบบยังไม่ถึงป้าย ค่านี้จะเป็น null
+    }));
+    res.json(logs);
+  } catch (error) {
+    console.error("Trip Logs Error:", error);
+    res.status(500).json({ message: "Error fetching trip logs", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
+// ==========================================
+// 5. อัปเดตเวลาเมื่อรถเดินทางถึงจุดจอดจริง
+// ==========================================
+app.put("/api/driver/trip-logs/:log_code/arrive", async (req, res) => {
+  const { log_code } = req.params;
+  let connection;
+  try {
+    connection = await getConnection();
+    // อัปเดต actual_timestamp เป็นเวลาปัจจุบันของระบบฐานข้อมูล (SYSTIMESTAMP)
+    await connection.execute(
+      `UPDATE trip_logs SET actual_timestamp = SYSTIMESTAMP WHERE log_code = :log_code`,
+      { log_code },
+      { autoCommit: true }
+    );
+    res.json({ message: "อัปเดตเวลาถึงป้ายสำเร็จ" });
+  } catch (error) {
+    console.error("Update Arrive Error:", error);
+    res.status(500).json({ message: "Error updating trip log", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});

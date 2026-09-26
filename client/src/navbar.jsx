@@ -1,19 +1,21 @@
 import React from "react";
-import { Link, useNavigate } from "react-router-dom"; 
+import { Link, useNavigate } from "react-router-dom";
 import "./Navbar.css";
 
 function Navbar() {
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem("user") || "null");
-  
+
   // 1. ดึงข้อมูล allowedScreens ที่เซฟมาจากตอน Login 
   const allowedScreens = user?.allowedScreens || [];
 
   // 2. เช็คสิทธิ์ตาม SCREEN_CODE
-  const canAccessEmp = allowedScreens.includes("S01"); 
-  const canAccessPas = allowedScreens.includes("S02"); 
+  const canAccessEmp = allowedScreens.includes("S01");
+  const canAccessPas = allowedScreens.includes("S02");
   const canAccessPermission = allowedScreens.includes("S03");
   const canAccessReportPage = allowedScreens.includes("S04");
+  const canAccessDriverPage = allowedScreens.includes("S05");
+
   const handleLogout = () => {
     localStorage.removeItem("user");
     navigate("/login");
@@ -32,7 +34,23 @@ function Navbar() {
               Home
             </Link>
           </li>
-          
+
+          {canAccessReportPage && (
+            <li className="nav-item">
+              <Link className="nav-link" to="/report">
+                Report
+              </Link>
+            </li>
+          )}
+
+          {canAccessDriverPage && (
+            <li className="nav-item">
+              <Link className="nav-link" to="/driver">
+                Driver
+              </Link>
+            </li>
+          )}
+
           {canAccessEmp && (
             <li className="nav-item">
               <Link className="nav-link" to="/employee">
@@ -40,7 +58,7 @@ function Navbar() {
               </Link>
             </li>
           )}
-          
+
           {/* เปลี่ยนจาก Customers เป็น Passenger */}
           {canAccessPas && (
             <li className="nav-item">
@@ -49,14 +67,7 @@ function Navbar() {
               </Link>
             </li>
           )}
-            
-          {canAccessReportPage && (
-            <li className="nav-item">
-              <Link className="nav-link" to="/report">
-                Report
-              </Link>
-            </li>
-          )}
+
 
           {canAccessPermission && (
             <li className="nav-item">

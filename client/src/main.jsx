@@ -13,6 +13,7 @@ import Register from "./Register";
 import Permission from "./Permission";
 import ProtectedRoute from "./ProtectedRoute";
 import Report from "./Report"; 
+import Driver from "./Driver"; 
 
 const router = createBrowserRouter([
   {
@@ -62,6 +63,15 @@ const router = createBrowserRouter([
     element: (
       <ProtectedRoute requiredScreenCode="S04">
         <Report />
+      </ProtectedRoute>
+    ),
+  },
+   {
+   
+    path: "/driver",
+    element: (
+      <ProtectedRoute requiredScreenCode="S05">
+        <Driver />
       </ProtectedRoute>
     ),
   },
