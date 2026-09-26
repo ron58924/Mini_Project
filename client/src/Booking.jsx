@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from './Navbar'; 
-import './Booking.css'; // <--- เรียกใช้ไฟล์ CSS เพียว
+import './Booking.css'; 
+
+// ดึง useAuth เข้ามาใช้งาน (ปรับ Path ให้ตรงกับที่เก็บไฟล์ AuthContext ของคุณ)
+import { useAuth } from './context/AuthContext'; 
 
 const Booking = () => {
+  // เรียกใช้งานข้อมูล user จาก Context
+  const { user } = useAuth();
+
   const [routes, setRoutes] = useState([]);
   const [stops, setStops] = useState([]);
   const [schedules, setSchedules] = useState([]);
@@ -13,8 +19,7 @@ const Booking = () => {
   const [selectedSchedule, setSelectedSchedule] = useState('');
   const [passengerCount, setPassengerCount] = useState(1);
 
-  const currentUserCode = 'USR001'; 
-
+  // ดึงข้อมูลเส้นทางตั้งแต่เริ่มโหลดหน้า
   useEffect(() => {
     fetch('http://localhost:5000/api/booking/routes')
       .then(res => res.json())
@@ -22,6 +27,7 @@ const Booking = () => {
       .catch(err => console.error(err));
   }, []);
 
+  // ดึงข้อมูลป้ายและรอบรถ เมื่อมีการเลือกเส้นทาง
   useEffect(() => {
     if (selectedRoute) {
       fetch(`http://localhost:5000/api/booking/routes/${selectedRoute}/stops`)
@@ -32,6 +38,7 @@ const Booking = () => {
         .then(res => res.json())
         .then(data => setSchedules(data));
         
+      // เคลียร์ค่าที่เลือกไว้เดิมเมื่อเปลี่ยนเส้นทาง
       setPickupStop('');
       setDropoffStop('');
       setSelectedSchedule('');
@@ -40,13 +47,21 @@ const Booking = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // เช็คว่าผู้ใช้ล็อกอินอยู่หรือไม่
+    if (!user || !user.user_code) {
+      alert('กรุณาเข้าสู่ระบบก่อนทำการจอง');
+      return;
+    }
+
     if (!selectedRoute || !pickupStop || !dropoffStop || !selectedSchedule) {
       alert('กรุณากรอกข้อมูลให้ครบถ้วน');
       return;
     }
 
+    // ใช้ user_code จากระบบ Login จริง
     const payload = {
-      user_code: currentUserCode,
+      user_code: user.user_code,
       schedule_code: selectedSchedule,
       pickup_stop_code: pickupStop,
       dropoff_stop_code: dropoffStop,
@@ -63,6 +78,12 @@ const Booking = () => {
       
       if (response.ok) {
         alert(`จองสำเร็จ! รหัสการจอง: ${result.booking_code}\nQR Code: ${result.qr_code}`);
+        // รีเซ็ตฟอร์มหลังจากจองเสร็จ
+        setSelectedRoute('');
+        setPickupStop('');
+        setDropoffStop('');
+        setSelectedSchedule('');
+        setPassengerCount(1);
       } else {
         alert(`เกิดข้อผิดพลาด: ${result.message}`);
       }
@@ -81,7 +102,10 @@ const Booking = () => {
           
           <div className="booking-header">
             <h2 className="booking-title">จองตั๋วโดยสาร</h2>
-            <p className="booking-subtitle">เลือกรอบรถและจุดขึ้น-ลง เพื่อสำรองที่นั่ง</p>
+            {/* แสดงชื่อผู้ใช้งานที่กำลังจอง */}
+            <p className="booking-subtitle">
+              ผู้ใช้งาน: {user ? `${user.first_name}` : 'กำลังโหลด...'}
+            </p>
           </div>
 
           <form onSubmit={handleSubmit} className="booking-form">

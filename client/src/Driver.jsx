@@ -3,6 +3,8 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import "bootstrap/dist/css/bootstrap.min.css";
 import Navbar from "./Navbar";
+// 1. Import useAuth เข้ามา
+import { useAuth } from "./context/AuthContext"; 
 
 const API_URL = "http://localhost:5000/api";
 
@@ -16,34 +18,35 @@ function Driver() {
   
   const [isScanning, setIsScanning] = useState(false);
   const [fakeQrText, setFakeQrText] = useState("");
-
-  // State สำหรับเปิด-ปิดการแสดงผลรายชื่อผู้โดยสาร
   const [isPassengerListOpen, setIsPassengerListOpen] = useState(true);
 
-  const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+  // 2. เรียกใช้งาน user จาก Context แทน localStorage
+  const { user } = useAuth(); 
 
+  // 3. ปรับ useEffect ให้ทำงานเมื่อตัวแปร user โหลดเสร็จ
   useEffect(() => {
-    if (currentUser.user_code) {
-      fetchSchedules();
+    if (user && user.user_code) {
+      fetchSchedules(user.user_code);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (selectedSchedule) {
       fetchPassengers(selectedSchedule);
       fetchTripLogs(selectedSchedule);
       setIsScanning(false);
-      setIsPassengerListOpen(true); // กางรายชื่อผู้โดยสารอัตโนมัติเมื่อเลือกรอบใหม่
+      setIsPassengerListOpen(true);
     } else {
       setPassengers([]);
       setTripLogs([]);
     }
   }, [selectedSchedule]);
 
-  const fetchSchedules = async () => {
+  // ปรับให้รับ parameter driverCode ป้องกันปัญหา State ไม่อัปเดต
+  const fetchSchedules = async (driverCode) => {
     try {
       const response = await axios.get(`${API_URL}/driver/schedules`, {
-        params: { driver_code: currentUser.user_code }
+        params: { driver_code: driverCode } 
       });
       setSchedules(response.data);
     } catch (error) {
@@ -153,7 +156,6 @@ function Driver() {
     }
   };
 
-  // หาจุดจอดถัดไปที่ยังไปไม่ถึง (เพื่อปั้นเป็นปุ่มกดอันเดียว)
   const nextStop = tripLogs.find(log => log.actual_time === null);
 
   return (
@@ -162,7 +164,6 @@ function Driver() {
       <div className="container-fluid py-3 px-3" style={{ fontFamily: "'Prompt', sans-serif", backgroundColor: "#f8f9fa", minHeight: "100vh", paddingBottom: "80px" }}>
         <h4 className="fw-bold text-dark mb-3">ระบบคนขับรถ</h4>
 
-        {/* 1. เลือกรอบรถ (เปลี่ยนจาก Dropdown เป็นปุ่มการ์ดให้กดง่ายๆ) */}
         <div className="mb-4">
           <label className="form-label fw-bold text-primary mb-2">รอบรถของคุณ (วันนี้)</label>
           {schedules.length === 0 ? (
@@ -188,13 +189,11 @@ function Driver() {
           )}
         </div>
 
-        {/* 2. สถานะการเดินทาง (จุดจอด) */}
         {selectedSchedule && tripLogs.length > 0 && (
           <div className="card shadow-sm border-0 mb-4 rounded-4 border-start border-primary border-4">
             <div className="card-body p-3">
               <h5 className="fw-bold text-dark mb-3">📍 เส้นทางการเดินรถ</h5>
               
-              {/* ปุ่มกดไปสถานีถัดไป (ปุ่มเดียวใหญ่ๆ) */}
               {nextStop ? (
                 <button 
                   className="btn btn-primary w-100 rounded-pill fw-bold py-3 mb-4 shadow-sm fs-5"
@@ -208,7 +207,6 @@ function Driver() {
                 </div>
               )}
               
-              {/* แสดงสถานะว่าผ่านป้ายไหนมาแล้วบ้าง */}
               <div className="d-flex flex-column gap-2">
                 {tripLogs.map((log) => {
                   const isArrived = log.actual_time !== null;
@@ -245,7 +243,6 @@ function Driver() {
           </div>
         )}
 
-        {/* 3. รายชื่อผู้โดยสาร (เปิด/ปิด ได้) */}
         {selectedSchedule && (
           <div className="mb-3">
             <div 
@@ -296,7 +293,6 @@ function Driver() {
           </div>
         )}
 
-        {/* ปุ่มจำลองสแกน */}
         {selectedSchedule && !isScanning && (
           <button 
             className="btn btn-dark shadow-lg rounded-pill fw-bold"
