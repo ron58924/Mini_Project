@@ -1263,3 +1263,119 @@ app.put('/api/bookings/:bookingCode/cancel', async (req, res) => {
     if (connection) await connection.close();
   }
 });
+// ==========================================
+// [เพิ่มใหม่] 1. ดึงข้อมูลจุดจอดทั้งหมด (ไม่แบ่งสาย) เพื่อทำ Dropdown
+// ==========================================
+app.get('/api/stations', async (req, res) => {
+  let connection;
+  try {
+    connection = await getConnection();
+    const result = await connection.execute(
+      `SELECT stop_code, stop_name FROM stations ORDER BY stop_name`
+    );
+    const stations = result.rows.map(row => ({
+      stop_code: row[0],
+      stop_name: row[1]
+    }));
+    res.json(stations);
+  } catch (error) {
+    res.status(500).json({ message: "Cannot get stations", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
+// ==========================================
+// [เพิ่มใหม่] 2. ค้นหารอบรถจากจุดขึ้น-จุดลง (Smart Search)
+// ==========================================
+app.get('/api/booking/search', async (req, res) => {
+  const { pickup_code, dropoff_code, travel_date } = req.query;
+  let connection;
+
+  try {
+    connection = await getConnection();
+    // Query นี้จะหาว่ามีรอบรถไหนบ้างที่ผ่านจุดขึ้น และไปจุดลง ตามลำดับ
+    // พร้อมดึงเวลาที่คาดว่าจะถึงจุดขึ้นรถ (expected_pickup_time) และเช็คที่นั่งว่าง
+    const query = `
+      WITH OrderedLogs AS (
+          SELECT log_code, schedule_code, stop_code, expected_timestamp,
+                 ROW_NUMBER() OVER (PARTITION BY schedule_code ORDER BY expected_timestamp ASC) as stop_order
+          FROM trip_logs
+      ),
+      MatchingSchedules AS (
+          SELECT p.schedule_code,
+                 p.log_code as pickup_log_code, p.stop_order as pickup_order, p.expected_timestamp as pickup_time,
+                 d.log_code as dropoff_log_code, d.stop_order as dropoff_order, d.expected_timestamp as dropoff_time
+          FROM OrderedLogs p
+          JOIN OrderedLogs d ON p.schedule_code = d.schedule_code
+          WHERE p.stop_code = :pickup_code
+            AND d.stop_code = :dropoff_code
+            AND p.stop_order < d.stop_order
+            -- เช็คว่าเวลาที่รถจะถึงจุดขึ้น ต้องมากกว่าเวลาปัจจุบัน 20 นาที
+            AND p.expected_timestamp > (SYSTIMESTAMP + INTERVAL '20' MINUTE)
+      ),
+      BookingOrders AS (
+          SELECT b.booking_code, b.passenger_count,
+                 p.schedule_code, p.stop_order as p_order, d.stop_order as d_order
+          FROM bookings b
+          JOIN OrderedLogs p ON b.pickup_log_code = p.log_code
+          JOIN OrderedLogs d ON b.dropoff_log_code = d.log_code
+          WHERE b.status IN ('ACTIVE', 'COMPLETED')
+            AND TRUNC(b.travel_date) = TO_DATE(:travel_date, 'YYYY-MM-DD')
+      ),
+      ScheduleUsage AS (
+          SELECT 
+              ms.schedule_code, ms.pickup_time, ms.pickup_order, ms.dropoff_order,
+              s.start_time, r.route_code, r.route_name, v.capacity,
+              NVL((
+                  SELECT MAX(passengers_on_board)
+                  FROM (
+                      SELECT segments.check_order, NVL(SUM(bo.passenger_count), 0) as passengers_on_board
+                      FROM (
+                          SELECT ms.pickup_order + LEVEL - 1 AS check_order FROM DUAL
+                          CONNECT BY LEVEL <= (ms.dropoff_order - ms.pickup_order)
+                      ) segments
+                      LEFT JOIN BookingOrders bo 
+                             ON bo.schedule_code = ms.schedule_code
+                            AND bo.p_order <= segments.check_order
+                            AND bo.d_order > segments.check_order
+                      GROUP BY segments.check_order
+                  )
+              ), 0) AS max_used_seats
+          FROM MatchingSchedules ms
+          JOIN schedules s ON ms.schedule_code = s.schedule_code
+          JOIN routes r ON s.route_code = r.route_code
+          JOIN vehicles v ON s.vehicle_code = v.vehicle_code
+      )
+      SELECT 
+          schedule_code, route_code, route_name, 
+          TO_CHAR(pickup_time, 'HH24:MI') as expected_pickup_time, 
+          capacity, max_used_seats,
+          (capacity - max_used_seats) AS available_seats,
+          pickup_order, dropoff_order
+      FROM ScheduleUsage
+      ORDER BY pickup_time ASC
+    `;
+
+    const result = await connection.execute(query, { pickup_code, dropoff_code, travel_date });
+
+    const schedules = result.rows.map(row => ({
+      schedule_code: row[0],
+      route_code: row[1],
+      route_name: row[2],
+      expected_pickup_time: row[3], // เวลาที่ต้องไปรอรถ
+      total_capacity: row[4],
+      used_seats: row[5],
+      available_seats: row[6],
+      pickup_order: row[7],
+      dropoff_order: row[8]
+    }));
+
+    res.json(schedules);
+  } catch (error) {
+    console.error("Search Error:", error);
+    res.status(500).json({ message: "Error searching schedules", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
