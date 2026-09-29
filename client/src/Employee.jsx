@@ -10,11 +10,11 @@ function Employee() {
   const [users, setUsers] = useState([]);
 
   const [roleOptions, setRoleOptions] = useState([]);
-  const [deptOptions, setDeptOptions] = useState([]);       // ใช้ในฟอร์ม เพิ่ม/แก้ไข (เหมือนเดิม ไม่แตะ)
-  const [allDeptOptions, setAllDeptOptions] = useState([]); // รายชื่อแผนกฉบับเต็ม (ไม่กรองชื่อ) ใช้คำนวณตัวกรองค้นหาเท่านั้น
+  const [deptOptions, setDeptOptions] = useState([]);       // ใช้ในฟอร์ม เพิ่ม/แก้ไข
+  const [allDeptOptions, setAllDeptOptions] = useState([]); // รายชื่อแผนกฉบับเต็ม
 
-  const [searchTerm, setSearchTerm] = useState(""); // ค้นหาจากชื่อ/นามสกุล/username
-  const [filterDept, setFilterDept] = useState(""); // กรองตามแผนก (เฉพาะ D05-D08)
+  const [searchTerm, setSearchTerm] = useState(""); 
+  const [filterDept, setFilterDept] = useState(""); 
 
   const [formData, setFormData] = useState({
     user_code: "", first_name: "", last_name: "", email: "", 
@@ -22,8 +22,6 @@ function Employee() {
   });
   
   const [isEditing, setIsEditing] = useState(false);
-  
-  // เพิ่ม State สำหรับควบคุมการเปิด/ปิด Modal
   const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
@@ -61,7 +59,6 @@ function Employee() {
       );
       setDeptOptions(staffDepartments);
 
-      // เก็บรายชื่อแผนกฉบับเต็ม (ไม่กรองชื่อ) ไว้ใช้กับตัวกรองค้นหาโดยเฉพาะ
       setAllDeptOptions(deptRes.data);
 
     } catch (error) {
@@ -73,21 +70,18 @@ function Employee() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // ฟังก์ชันเปิด Modal สำหรับ "เพิ่มพนักงาน"
   const handleAddClick = () => {
     setIsEditing(false);
     setFormData({ user_code: "", first_name: "", last_name: "", email: "", username: "", password: "", role_code: "", dept_code: "" });
     setShowModal(true);
   };
 
-  // ฟังก์ชันเปิด Modal สำหรับ "แก้ไขพนักงาน"
   const handleEditClick = (user) => {
     setIsEditing(true);
     setFormData({ ...user, password: "" }); 
     setShowModal(true);
   };
 
-  // ฟังก์ชันปิด Modal
   const closeModal = () => {
     setShowModal(false);
     setFormData({ user_code: "", first_name: "", last_name: "", email: "", username: "", password: "", role_code: "", dept_code: "" });
@@ -103,7 +97,7 @@ function Employee() {
         await axios.post("http://localhost:5000/api/users", formData);
         Swal.fire({ icon: "success", title: "เพิ่มผู้ใช้สำเร็จ", timer: 1500, showConfirmButton: false });
       }
-      closeModal(); // ปิดหน้าต่างเมื่อบันทึกสำเร็จ
+      closeModal();
       fetchUsers();
     } catch (error) {
       Swal.fire({ icon: "error", title: "เกิดข้อผิดพลาด", text: error.response?.data?.message || "ไม่สามารถบันทึกข้อมูลได้" });
@@ -131,12 +125,10 @@ function Employee() {
     }
   };
 
-  // รายชื่อแผนกที่ใช้ใน "ตัวกรองค้นหา" เท่านั้น (เฉพาะ D05-D08)
   const searchDeptOptions = allDeptOptions.filter((dept) =>
     SEARCH_DEPT_CODES.includes(dept.dept_code)
   );
 
-  // ค้นหาจากชื่อ, นามสกุล หรือ username + กรองตามแผนก
   const filteredUsers = users.filter((user) => {
     const keyword = searchTerm.trim().toLowerCase();
     const matchSearch =
@@ -151,24 +143,126 @@ function Employee() {
   });
 
   return (
-    <>
+    <div style={{ fontFamily: "'Prompt', sans-serif", backgroundColor: "#fafafa", minHeight: "100vh" }}>
+      {/* สไตล์ CSS สำหรับปรับแต่งให้เหมือนหน้า Passenger */}
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap');
+        
+        * {
+          font-family: 'Prompt', sans-serif !important;
+        }
+
+        /* ตกแต่งช่อง Input / Select */
+        .search-box-custom {
+          background-color: #f4f6f8 !important;
+          border: 1px solid #e5e7eb !important;
+          border-radius: 10px !important;
+          font-size: 14px;
+          color: #374151;
+        }
+
+        .search-box-custom:focus {
+          border-color: #be123c !important;
+          box-shadow: 0 0 0 3px rgba(190, 18, 60, 0.15) !important;
+        }
+
+        /* ตารางและหัวตาราง (แถบชื่อ/รหัส) */
+        .table-custom-wrapper {
+          border-radius: 12px;
+          overflow: hidden;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+          border: 1px solid #e5e7eb;
+        }
+
+        /* กำหนดสีแดงเลือดหมูให้ช่อง th ทุกช่องในหัวตาราง */
+        .table-custom-header th {
+          background-color: #3d080b !important;
+          color: #ffffff !important;
+          font-size: 14px !important;
+          font-weight: 600 !important;
+          letter-spacing: 0.5px;
+          border-bottom: none !important;
+        }
+
+        .table-custom tbody tr:nth-of-type(even) {
+          background-color: #f9fafb;
+        }
+
+        .table-custom tbody tr:hover {
+          background-color: #f3f4f6;
+        }
+
+        /* ปุ่มเพิ่มผู้ใช้ */
+        .btn-add-passenger {
+          background-color: #be123c !important;
+          color: #ffffff !important;
+          border: none !important;
+          border-radius: 30px !important;
+          padding: 8px 24px !important;
+          font-weight: 600 !important;
+          font-size: 15px !important;
+          box-shadow: 0 4px 12px rgba(190, 18, 60, 0.3) !important;
+          transition: all 0.2s ease-in-out;
+        }
+
+        .btn-add-passenger:hover {
+          background-color: #9f1239 !important;
+          transform: translateY(-1px);
+        }
+
+        /* ปุ่มแก้ไข และ ปุ่มลบ */
+        .btn-edit-action {
+          background-color: #f59e0b !important;
+          color: #000000 !important;
+          border: none !important;
+          border-radius: 6px !important;
+          font-weight: 600 !important;
+          font-size: 13px !important;
+          padding: 4px 14px !important;
+        }
+
+        .btn-edit-action:hover {
+          background-color: #d97706 !important;
+        }
+
+        .btn-delete-action {
+          background-color: #dc2626 !important;
+          color: #ffffff !important;
+          border: none !important;
+          border-radius: 6px !important;
+          font-weight: 600 !important;
+          font-size: 13px !important;
+          padding: 4px 14px !important;
+        }
+
+        .btn-delete-action:hover {
+          background-color: #b91c1c !important;
+        }
+      `}</style>
+
       <Navbar />
-      <div className="container mt-4">
+      
+      <div className="container py-4">
         
         {/* Header และปุ่มเพิ่มพนักงาน */}
         <div className="d-flex justify-content-between align-items-center mb-4">
-          <h2>จัดการผู้ใช้งาน (Users)</h2>
-          <button className="btn btn-primary" onClick={handleAddClick}>
+          <h2 className="fw-bold text-dark mb-0" style={{ fontSize: "28px" }}>
+            จัดการพนักงาน (Empolyee)
+          </h2>
+          <button 
+            className="btn btn-add-passenger"
+            onClick={handleAddClick}
+          >
             + เพิ่มพนักงาน
           </button>
         </div>
 
-        {/* ช่องค้นหาชื่อ/นามสกุล/username + ตัวกรองแผนก (เฉพาะ D05-D08) */}
-        <div className="row g-2 mb-3">
+        {/* ช่องค้นหา และ ตัวกรองแผนก */}
+        <div className="row g-3 mb-4">
           <div className="col-md-6">
             <input
               type="text"
-              className="form-control"
+              className="form-control search-box-custom py-2 px-3"
               placeholder="ค้นหาชื่อ, นามสกุล หรือ Username..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -176,7 +270,7 @@ function Employee() {
           </div>
           <div className="col-md-6">
             <select
-              className="form-select"
+              className="form-select search-box-custom py-2 px-3"
               value={filterDept}
               onChange={(e) => setFilterDept(e.target.value)}
             >
@@ -190,48 +284,56 @@ function Employee() {
           </div>
         </div>
 
-        {/* ตารางแสดงข้อมูล */}
-        <div className="table-responsive">
-          <table className="table table-bordered table-hover align-middle">
-            <thead className="table-dark text-center">
-              <tr>
-                <th>รหัส</th>
-                <th>ชื่อ - นามสกุล</th>
-                <th>อีเมล</th>
-                <th>Username</th>
-                <th>Role (สิทธิ์)</th>
-                <th>Dept (แผนก)</th>
-                <th>จัดการ</th>
+        {/* ตารางข้อมูล */}
+        <div className="table-responsive table-custom-wrapper">
+          <table className="table table-custom align-middle mb-0">
+            <thead>
+              <tr className="text-center table-custom-header">
+                <th className="py-3" style={{ width: "10%" }}>รหัส</th>
+                <th className="py-3">ชื่อ - นามสกุล</th>
+                <th className="py-3">อีเมล</th>
+                <th className="py-3" style={{ width: "15%" }}>USERNAME</th>
+                <th className="py-3">ROLE (สิทธิ์)</th>
+                <th className="py-3">DEPT (แผนก)</th>
+                <th className="py-3" style={{ width: "14%" }}>จัดการ</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody style={{ fontSize: "14px", color: "#1f2937" }}>
               {filteredUsers.length > 0 ? (
                 filteredUsers.map((user) => (
                   <tr key={user.user_code}>
-                    <td className="text-center">{user.user_code}</td>
+                    <td className="text-center fw-medium">{user.user_code}</td>
                     <td>{user.first_name} {user.last_name}</td>
                     <td>{user.email}</td>
-                    <td>{user.username}</td>
+                    <td className="text-center">{user.username}</td>
                     <td className="text-center">{user.role_name}</td>
-                    <td>{user.dept_name}</td>
+                    <td>{user.dept_name || "-"}</td>
                     <td className="text-center">
-                      <button className="btn btn-warning btn-sm me-2" onClick={() => handleEditClick(user)}>แก้ไข</button>
-                      <button className="btn btn-danger btn-sm" onClick={() => handleDelete(user.user_code)}>ลบ</button>
+                      <button 
+                        className="btn btn-edit-action me-2"
+                        onClick={() => handleEditClick(user)}
+                      >
+                        แก้ไข
+                      </button>
+                      <button 
+                        className="btn btn-delete-action"
+                        onClick={() => handleDelete(user.user_code)}
+                      >
+                        ลบ
+                      </button>
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan="7" className="text-center py-4 text-muted">ไม่พบข้อมูลพนักงานที่ตรงกับเงื่อนไข</td>
+                  <td colSpan="7" className="text-center py-5 text-muted">ไม่พบข้อมูลพนักงานที่ตรงกับเงื่อนไข</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
 
-        {/* =====================================================
-            Popup Modal สำหรับ เพิ่ม/แก้ไข
-        ===================================================== */}
+        {/* Modal เพิ่ม/แก้ไข */}
         {showModal && (
           <div className="modal fade show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
             <div className="modal-dialog modal-lg modal-dialog-centered">
@@ -291,8 +393,8 @@ function Employee() {
                     </div>
                   </div>
                   <div className="modal-footer border-top-0 bg-light rounded-bottom-4">
-                    <button type="button" className="btn btn-secondary px-4" onClick={closeModal}>ยกเลิก</button>
-                    <button type="submit" className="btn btn-primary px-4">
+                    <button type="button" className="btn btn-secondary px-4 fw-bold" onClick={closeModal}>ยกเลิก</button>
+                    <button type="submit" className="btn text-white px-4 fw-bold" style={{ backgroundColor: "#be123c", borderRadius: "8px" }}>
                       {isEditing ? "บันทึกการแก้ไข" : "ยืนยันการเพิ่ม"}
                     </button>
                   </div>
@@ -303,7 +405,7 @@ function Employee() {
         )}
 
       </div>
-    </>
+    </div>
   );
 }
 
