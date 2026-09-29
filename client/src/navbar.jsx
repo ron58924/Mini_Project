@@ -1,60 +1,44 @@
 import React from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { 
   Bus, 
-  Home, 
-  Users, 
-  Contact, 
-  Package, 
-  BarChart3, 
-  KeyRound, 
   User, 
   LogOut, 
   LogIn 
 } from "lucide-react";
 import "./navbar.css";
 
-// รายการเมนูพร้อม SCREEN_CODE และ Icon
-const NAV_ITEMS = [
-  { code: "S04", label: "Employee", to: "/employee", icon: Users },
-  { code: "S02", label: "Passenger", to: "/passenger", icon: Contact },
-  { code: "S03", label: "Product", to: "/product", icon: Package },
-  { code: "S01", label: "Report", to: "/report", icon: BarChart3 },
-  { code: "S05", label: "Permission", to: "/permission", icon: KeyRound },
-];
-
 function Navbar() {
   const navigate = useNavigate();
-  const location = useLocation();
 
   // ดึงข้อมูลผู้ใช้งานจาก LocalStorage
   const user = JSON.parse(localStorage.getItem("user") || "null");
   const allowedScreens = user?.allowedScreens || [];
 
-  // 2. เช็คสิทธิ์ตาม SCREEN_CODE
-  const canAccessEmp = allowedScreens.includes("S01");
-  const canAccessPas = allowedScreens.includes("S02");
-  const canAccessPermission = allowedScreens.includes("S03");
-  const canAccessReportPage = allowedScreens.includes("S04");
-  const canAccessDriverPage = allowedScreens.includes("S05");
-  const canAccessBookingPage = allowedScreens.includes("S06");
+  // เช็คสิทธิ์ตาม SCREEN_CODE
+ const canAccessReportPage   = allowedScreens.includes("S01");
+  const canAccessDriverPage   = allowedScreens.includes("S02");
+  const canAccessBookingPage  = allowedScreens.includes("S03");
+  const canAccessEmp          = allowedScreens.includes("S04");
+  const canAccessPas          = allowedScreens.includes("S05");
+  const canAccessPermission   = allowedScreens.includes("S06");
+  
   const handleLogout = () => {
     localStorage.removeItem("user");
     navigate("/login");
   };
 
-  const isActive = (path) => location.pathname === path;
-
   return (
     <nav className="navbar navbar-expand-lg navbar-dark bg-primary px-3">
-      {/* Brand Logo พร้อม ไอคอนรถบัส */}
-      <Link className="navbar-brand navbar-brand-stacked d-flex align-items-center gap-2" to="/">
+      
+      {/* Brand Logo: เปลี่ยนเป็น div เพื่อโชว์เฉยๆ ไม่มีฟังก์ชันกดเปลี่ยนหน้า */}
+      <div className="navbar-brand navbar-brand-stacked d-flex align-items-center gap-2" style={{ cursor: "default" }}>
         <Bus size={28} className="text-white" />
         <div>
           <span className="navbar-brand-mut">MUT</span>
           <span className="navbar-brand-sub">Shuttle Bus</span>
         </div>
-      </Link>
+      </div>
 
       {/* Hamburger Menu สำหรับ Mobile */}
       <button
@@ -71,17 +55,7 @@ function Navbar() {
 
       <div className="collapse navbar-collapse" id="navbarContent">
         <ul className="navbar-nav me-auto align-items-lg-center">
-          {/* เมนูหลัก Home */}
-          <li className="nav-item">
-            <Link
-              className={`nav-link-icon ${isActive("/") ? "active-pill" : ""}`}
-              to="/"
-            >
-              <Home size={18} />
-              <span>Home</span>
-            </Link>
-          </li>
-
+          
           {canAccessReportPage && (
             <li className="nav-item">
               <Link className="nav-link" to="/report">
@@ -114,7 +88,6 @@ function Navbar() {
             </li>
           )}
 
-          {/* เปลี่ยนจาก Customers เป็น Passenger */}
           {canAccessPas && (
             <li className="nav-item">
               <Link className="nav-link" to="/passenger">
@@ -122,7 +95,6 @@ function Navbar() {
               </Link>
             </li>
           )}
-
 
           {canAccessPermission && (
             <li className="nav-item">
@@ -165,4 +137,5 @@ function Navbar() {
   );
 }
 
+// นี่คือบรรทัดที่ทำให้ไฟล์อื่นนำไปใช้งานได้ครับ
 export default Navbar;

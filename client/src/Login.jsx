@@ -6,7 +6,7 @@ import "./Login.css";
 import { useAuth } from "./context/AuthContext";
 
 // ==========================================
-// SVG Icons Components (เหมือนเดิม)
+// SVG Icons Components
 // ==========================================
 function UserIcon() {
   return (
@@ -77,8 +77,6 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
-  
-  // เพิ่มเข้ามาใหม่: ดึงฟังก์ชัน login จาก Context
   const { login } = useAuth(); 
 
   const handleLogin = async (e) => {
@@ -96,14 +94,15 @@ export default function Login() {
     setLoading(true);
 
     try {
-      // ยิง API ด้วย Axios
       const response = await axios.post("http://localhost:5000/api/login", {
         email: email,
         password: password,
       });
 
-      // แก้ไขตรงนี้: เรียกใช้ฟังก์ชัน login จาก Context แทนการเขียน localStorage ตรงๆ
-      login(response.data.user);
+      const userData = response.data.user;
+
+      // 1. นำข้อมูลเข้า Context 
+      login(userData);
 
       if (rememberMe) {
         localStorage.setItem("rememberEmail", email);
@@ -118,8 +117,19 @@ export default function Login() {
         showConfirmButton: false,
       });
 
-      navigate("/");
-      // แก้ไขตรงนี้: ลบ window.location.reload(); ออก เพราะ Context จะอัปเดต UI ให้ทันที
+      // 2. คำนวณหาหน้าซ้ายสุดที่อนุญาตให้เข้าถึง (เรียงตามลำดับ Navbar ของคุณ)
+      const allowed = userData.allowedScreens || [];
+      let targetPath = "/login"; // ถ้าไม่มีสิทธิ์เลย ให้เตะกลับมาหน้าเดิม
+
+      if (allowed.includes("S04")) targetPath = "/report";
+      else if (allowed.includes("S05")) targetPath = "/driver";
+      else if (allowed.includes("S06")) targetPath = "/booking";
+      else if (allowed.includes("S01")) targetPath = "/employee";
+      else if (allowed.includes("S02")) targetPath = "/passenger";
+      else if (allowed.includes("S03")) targetPath = "/permission";
+
+      // 3. ย้ายไปหน้าที่คำนวณได้ทันที (ใช้ replace เพื่อไม่ให้กดย้อนกลับมาหน้า login ได้)
+      navigate(targetPath, { replace: true });
       
     } catch (error) {
       Swal.fire({
@@ -141,7 +151,6 @@ export default function Login() {
       <section className="login-card">
         {/* ================= ฝั่งซ้าย Brand ================= */}
         <div className="brand-panel">
-          {/* ก้อนสี่เหลี่ยมจัตุรัส Glassmorphic ครบ 12 ชิ้น */}
           <div className="shape shape-1"></div>
           <div className="shape shape-2"></div>
           <div className="shape shape-3"></div>
