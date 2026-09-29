@@ -3,11 +3,18 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import Navbar from "./Navbar";
 
+// รหัสแผนกที่ต้องการให้แสดงใน "ตัวกรองค้นหาแผนก" เท่านั้น (D05-D08)
+const SEARCH_DEPT_CODES = ["D05", "D06", "D07", "D08"];
+
 function Employee() {
   const [users, setUsers] = useState([]);
-  
+
   const [roleOptions, setRoleOptions] = useState([]);
-  const [deptOptions, setDeptOptions] = useState([]);
+  const [deptOptions, setDeptOptions] = useState([]);       // ใช้ในฟอร์ม เพิ่ม/แก้ไข (เหมือนเดิม ไม่แตะ)
+  const [allDeptOptions, setAllDeptOptions] = useState([]); // รายชื่อแผนกฉบับเต็ม (ไม่กรองชื่อ) ใช้คำนวณตัวกรองค้นหาเท่านั้น
+
+  const [searchTerm, setSearchTerm] = useState(""); // ค้นหาจากชื่อ/นามสกุล/username
+  const [filterDept, setFilterDept] = useState(""); // กรองตามแผนก (เฉพาะ D05-D08)
 
   const [formData, setFormData] = useState({
     user_code: "", first_name: "", last_name: "", email: "", 
@@ -53,6 +60,9 @@ function Employee() {
         (dept) => !dept.dept_name.includes("Faculty")
       );
       setDeptOptions(staffDepartments);
+
+      // เก็บรายชื่อแผนกฉบับเต็ม (ไม่กรองชื่อ) ไว้ใช้กับตัวกรองค้นหาโดยเฉพาะ
+      setAllDeptOptions(deptRes.data);
 
     } catch (error) {
       console.error("Error fetching options:", error);
@@ -121,6 +131,25 @@ function Employee() {
     }
   };
 
+  // รายชื่อแผนกที่ใช้ใน "ตัวกรองค้นหา" เท่านั้น (เฉพาะ D05-D08)
+  const searchDeptOptions = allDeptOptions.filter((dept) =>
+    SEARCH_DEPT_CODES.includes(dept.dept_code)
+  );
+
+  // ค้นหาจากชื่อ, นามสกุล หรือ username + กรองตามแผนก
+  const filteredUsers = users.filter((user) => {
+    const keyword = searchTerm.trim().toLowerCase();
+    const matchSearch =
+      keyword === "" ||
+      user.first_name?.toLowerCase().includes(keyword) ||
+      user.last_name?.toLowerCase().includes(keyword) ||
+      user.username?.toLowerCase().includes(keyword);
+
+    const matchDept = filterDept === "" || user.dept_code === filterDept;
+
+    return matchSearch && matchDept;
+  });
+
   return (
     <>
       <Navbar />
@@ -132,6 +161,33 @@ function Employee() {
           <button className="btn btn-primary" onClick={handleAddClick}>
             + เพิ่มพนักงาน
           </button>
+        </div>
+
+        {/* ช่องค้นหาชื่อ/นามสกุล/username + ตัวกรองแผนก (เฉพาะ D05-D08) */}
+        <div className="row g-2 mb-3">
+          <div className="col-md-6">
+            <input
+              type="text"
+              className="form-control"
+              placeholder="ค้นหาชื่อ, นามสกุล หรือ Username..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="col-md-6">
+            <select
+              className="form-select"
+              value={filterDept}
+              onChange={(e) => setFilterDept(e.target.value)}
+            >
+              <option value="">-- ทุกแผนก --</option>
+              {searchDeptOptions.map((dept) => (
+                <option key={dept.dept_code} value={dept.dept_code}>
+                  {dept.dept_name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* ตารางแสดงข้อมูล */}
@@ -149,8 +205,8 @@ function Employee() {
               </tr>
             </thead>
             <tbody>
-              {users.length > 0 ? (
-                users.map((user) => (
+              {filteredUsers.length > 0 ? (
+                filteredUsers.map((user) => (
                   <tr key={user.user_code}>
                     <td className="text-center">{user.user_code}</td>
                     <td>{user.first_name} {user.last_name}</td>
@@ -166,7 +222,7 @@ function Employee() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="7" className="text-center py-4 text-muted">ไม่พบข้อมูลพนักงาน</td>
+                  <td colSpan="7" className="text-center py-4 text-muted">ไม่พบข้อมูลพนักงานที่ตรงกับเงื่อนไข</td>
                 </tr>
               )}
             </tbody>
