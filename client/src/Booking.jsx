@@ -24,6 +24,7 @@ const Booking = () => {
 
   const [cart, setCart] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [confirmedTickets, setConfirmedTickets] = useState([]);
 
   const [historyBookings, setHistoryBookings] = useState([]);
   const [historyFilter, setHistoryFilter] = useState('ACTIVE');
@@ -167,6 +168,7 @@ const Booking = () => {
     setIsSubmitting(true);
     let successCount = 0;
     let failMessages = [];
+    const createdTickets = [];
 
     try {
       for (const item of cart) {
@@ -186,6 +188,7 @@ const Booking = () => {
         
         if (response.ok) {
           successCount++;
+          createdTickets.push({ ...item, ...result });
         } else {
           // เก็บรายละเอียด Error ของแต่ละรายการไว้
           failMessages.push(`- ${item.route_name}: ${result.message}`);

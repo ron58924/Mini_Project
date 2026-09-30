@@ -1,11 +1,26 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import Swal from "sweetalert2";
+import { Html5Qrcode } from "html5-qrcode";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./Driver.css";
 import Navbar from "./Navbar";
-// 1. Import useAuth เข้ามา
 import { useAuth } from "./context/AuthContext"; 
+
+import { 
+  Calendar, 
+  MapPin, 
+  Bus, 
+  CheckCircle2, 
+  QrCode, 
+  Users, 
+  ChevronDown, 
+  X, 
+  Clock, 
+  Navigation,
+  Check,
+  UserX
+} from "lucide-react";
 
 const API_URL = "http://localhost:5000/api";
 
@@ -13,18 +28,15 @@ function Driver() {
   const [schedules, setSchedules] = useState([]);
   const [selectedSchedule, setSelectedSchedule] = useState("");
   const [passengers, setPassengers] = useState([]);
-  
   const [tripLogs, setTripLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   
   const [isScanning, setIsScanning] = useState(false);
-  const [fakeQrText, setFakeQrText] = useState("");
   const [isPassengerListOpen, setIsPassengerListOpen] = useState(true);
 
-  // 2. เรียกใช้งาน user จาก Context แทน localStorage
+  const html5QrCodeRef = useRef(null);
   const { user } = useAuth(); 
 
-  // 3. ปรับ useEffect ให้ทำงานเมื่อตัวแปร user โหลดเสร็จ
   useEffect(() => {
     if (user && user.user_code) {
       fetchSchedules(user.user_code);
@@ -43,7 +55,55 @@ function Driver() {
     }
   }, [selectedSchedule]);
 
-  // ปรับให้รับ parameter driverCode ป้องกันปัญหา State ไม่อัปเดต
+  // ระบบเปิด/ปิดกล้องสแกน QR Code จริง (Real Camera Scanner)
+  useEffect(() => {
+    let currentScanner = null;
+
+    if (isScanning) {
+      const qrCodeId = "real-qr-reader";
+      
+      // หน่วงเวลาเล็กน้อยเพื่อให้ DOM Render element id="real-qr-reader" เสร็จก่อน
+      const timer = setTimeout(() => {
+        if (!html5QrCodeRef.current) {
+          html5QrCodeRef.current = new Html5Qrcode(qrCodeId);
+        }
+        currentScanner = html5QrCodeRef.current;
+
+        currentScanner.start(
+          { facingMode: "environment" }, // ใช้กล้องหลังของมือถือ
+          { 
+            fps: 10, 
+            qrbox: { width: 250, height: 250 } 
+          },
+          (decodedText) => {
+            // เมื่อสแกน QR สำเร็จ นำข้อความที่ได้ไปประมวลผลทันที
+            handleScanSuccess(decodedText, currentScanner);
+          },
+          (errorMessage) => {
+            // Error ระหว่างสแกนหา QR (ปล่อยว่างไว้เพราะเป็นเรื่องปกติที่ยังสแกนไม่เจอในแต่ละเฟรม)
+          }
+        ).catch((err) => {
+          console.error("Failed to start scanner:", err);
+          Swal.fire({ 
+            icon: "error", 
+            title: "ไม่สามารถเปิดกล้องได้", 
+            text: "กรุณาอนุญาตการใช้งานกล้อง หรือตรวจสอบว่าใช้งานผ่าน HTTPS / Localhost" 
+          });
+          setIsScanning(false);
+        });
+      }, 100);
+
+      return () => clearTimeout(timer);
+    } else {
+      if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+        html5QrCodeRef.current.stop().then(() => {
+          html5QrCodeRef.current.clear();
+          html5QrCodeRef.current = null;
+        }).catch((err) => console.error("Failed to stop scanner", err));
+      }
+    }
+  }, [isScanning, passengers]);
+
   const fetchSchedules = async (driverCode) => {
     try {
       const response = await axios.get(`${API_URL}/driver/schedules`, {
@@ -99,61 +159,61 @@ function Driver() {
     }
   };
 
+  const handleScanSuccess = async (scannedText, scannerInstance) => {
+    // ปิดกล้องชั่วคราวเพื่อป้องกันการสแกนซ้ำซ้อนทันที
+    if (scannerInstance && scannerInstance.isScanning) {
+      await scannerInstance.stop().catch(() => {});
+    }
+    setIsScanning(false);
+
+    const bookingCodeClean = scannedText.trim();
+    const matchedPassenger = passengers.find(p => p.booking_code === bookingCodeClean);
+
+    if (matchedPassenger) {
+      if (matchedPassenger.status === 'ACTIVE') {
+        await handleUpdateStatus(matchedPassenger.booking_code, 'COMPLETED');
+        Swal.fire({
+          icon: "success",
+          title: "เช็คอินเรียบร้อย",
+          text: `ผู้โดยสาร: ${matchedPassenger.passenger_name}`,
+          timer: 2000,
+          showConfirmButton: false
+        });
+      } else {
+        Swal.fire({ 
+          icon: "warning", 
+          title: "ตั๋วถูกใช้งานแล้วหรือยกเลิก", 
+          text: `สถานะปัจจุบัน: ${matchedPassenger.status}` 
+        });
+      }
+    } else {
+      Swal.fire({ 
+        icon: "error", 
+        title: "ไม่พบข้อมูลผู้โดยสาร", 
+        text: `QR Code (${bookingCodeClean}) ไม่ตรงกับรอบรถนี้` 
+      });
+    }
+  };
+
   const handleArriveAtStop = async (logCode, stopName) => {
     const confirm = await Swal.fire({
-      title: `ถึง ${stopName}?`,
-      text: "ยืนยันว่ารถเดินทางมาถึงป้ายนี้แล้ว",
+      title: `ถึงจุดจอด ${stopName}?`,
+      text: "ยืนยันการบันทึกเวลาถึงป้ายจริงลงระบบ",
       icon: "question",
       showCancelButton: true,
       confirmButtonText: "ยืนยัน",
       cancelButtonText: "ยกเลิก",
-      confirmButtonColor: "#198754"
+      confirmButtonColor: "#a61920"
     });
 
     if (confirm.isConfirmed) {
       try {
         await axios.put(`${API_URL}/driver/trip-logs/${logCode}/arrive`);
         fetchTripLogs(selectedSchedule); 
-        Swal.fire({ icon: "success", title: "บันทึกเวลาถึงป้ายสำเร็จ", timer: 1000, showConfirmButton: false });
+        Swal.fire({ icon: "success", title: "บันทึกเวลาสำเร็จ", timer: 1000, showConfirmButton: false });
       } catch (error) {
         Swal.fire({ icon: "error", title: "เกิดข้อผิดพลาด", text: "ไม่สามารถบันทึกเวลาได้" });
       }
-    }
-  };
-
-  const handleScanSuccess = () => {
-    if (!fakeQrText.trim()) return;
-    const scannedText = fakeQrText.trim();
-    setIsScanning(false); 
-    setFakeQrText("");    
-    
-    const matchedPassenger = passengers.find(p => p.booking_code === scannedText);
-
-    if (matchedPassenger) {
-      if (matchedPassenger.status === 'ACTIVE') {
-        handleUpdateStatus(matchedPassenger.booking_code, 'COMPLETED');
-        Swal.fire({
-          icon: "success",
-          title: "เช็คอินเรียบร้อย",
-          text: `คุณ ${matchedPassenger.passenger_name}`,
-          timer: 2000,
-          showConfirmButton: false
-        });
-      } else {
-        Swal.fire({ icon: "warning", title: "ตั๋วถูกใช้งานแล้วหรือยกเลิก", text: `สถานะปัจจุบัน: ${matchedPassenger.status}` });
-      }
-    } else {
-      Swal.fire({ icon: "error", title: "ไม่พบข้อมูล", text: "QR Code นี้ไม่ได้จองในรอบรถปัจจุบัน" });
-    }
-  };
-
-  const renderStatusBadge = (status) => {
-    switch (status) {
-      case 'ACTIVE': return <span className="badge bg-warning text-dark px-3 py-2 rounded-pill">รอขึ้นรถ</span>;
-      case 'COMPLETED': return <span className="badge bg-success px-3 py-2 rounded-pill">ขึ้นรถแล้ว</span>;
-      case 'NO_SHOW': return <span className="badge bg-secondary px-3 py-2 rounded-pill">ไม่มา</span>;
-      case 'CANCELLED': return <span className="badge bg-danger px-3 py-2 rounded-pill">ยกเลิก</span>;
-      default: return null;
     }
   };
 
@@ -162,174 +222,192 @@ function Driver() {
   return (
     <>
       <Navbar />
-      <div className="driver-page container-fluid py-3 px-3">
-        <h4 className="fw-bold text-dark mb-3">ระบบคนขับรถ</h4>
-
-        <div className="mb-4">
-          <label className="form-label fw-bold text-primary mb-2">รอบรถของคุณ (วันนี้)</label>
-          {schedules.length === 0 ? (
-            <div className="alert alert-light text-muted border text-center rounded-4">
-              ไม่มีรอบการเดินรถที่ได้รับมอบหมายในวันนี้
-            </div>
-          ) : (
-            <div className="d-flex flex-column gap-2">
-              {schedules.map((sch) => (
-                <button 
-                  key={sch.schedule_code}
-                  className={`btn text-start p-3 rounded-4 shadow-sm fw-bold border-0 ${selectedSchedule === sch.schedule_code ? 'btn-primary' : 'bg-white text-dark'}`}
-                  onClick={() => setSelectedSchedule(sch.schedule_code)}
-                >
-                  <div className="d-flex justify-content-between align-items-center">
-                    <span>เวลา {sch.start_time} - {sch.route_name}</span>
-                    {selectedSchedule === sch.schedule_code && <span>✅</span>}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
+      <div className="driver-page">
+        <div className="driver-heading">
+          <h1>ระบบคนขับรถ</h1>
+          <p>จัดการรอบเดินรถ สแกนตั๋วผู้โดยสาร และบันทึกเวลาจุดจอด</p>
         </div>
 
-        {selectedSchedule && tripLogs.length > 0 && (
-          <div className="card shadow-sm border-0 mb-4 rounded-4 border-start border-primary border-4">
-            <div className="card-body p-3">
-              <h5 className="fw-bold text-dark mb-3">📍 เส้นทางการเดินรถ</h5>
-
-              {/* แสดงสถานะว่าผ่านป้ายไหนมาแล้วบ้าง */}
-              <div className="d-flex flex-column gap-2 mb-4">
-                {tripLogs.map((log) => {
-                  const isArrived = log.actual_time !== null;
-                  const isNext = nextStop && nextStop.log_code === log.log_code;
-
-                  return (
-                    <div key={log.log_code} className={`d-flex align-items-center justify-content-between p-2 rounded-3 border ${isNext ? 'bg-light border-primary border-2' : 'bg-white'}`}>
-                      <div className="d-flex align-items-center">
-                        <div className="me-3 text-center fs-5">
-                          {isArrived ? "✅" : isNext ? "🚌" : "📌"}
-                        </div>
-                        <div>
-                          <h6 className={`mb-0 fw-bold ${isArrived ? 'text-muted text-decoration-line-through' : isNext ? 'text-primary' : 'text-dark'}`}>
-                            {log.stop_name}
-                          </h6>
-                          <span className="driver-eta-text">คาดว่าถึง <strong>{log.expected_time}</strong></span>
-                        </div>
-                      </div>
-
-                      <div>
-                        {isArrived ? (
-                          <span className="badge bg-success bg-opacity-10 text-success border border-success px-2 py-1">ถึงแล้ว {log.actual_time}</span>
-                        ) : isNext ? (
-                          <span className="badge bg-primary px-3 py-1">กำลังมุ่งหน้า</span>
-                        ) : (
-                          <span className="badge bg-light text-muted border px-3 py-1">รอคิว</span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+        <div className="driver-layout">
+          {/* แผงรอบรถ */}
+          <div className="driver-schedule-panel">
+            <h2>
+              <Calendar size={18} className="text-danger" />
+              รอบรถของคุณ
+            </h2>
+            {schedules.length === 0 ? (
+              <div className="driver-empty">ไม่มีรอบการเดินรถวันนี้</div>
+            ) : (
+              <div className="driver-schedule-list">
+                {schedules.map((sch) => (
+                  <button 
+                    key={sch.schedule_code}
+                    className={`driver-schedule-item ${selectedSchedule === sch.schedule_code ? 'is-selected' : ''}`}
+                    onClick={() => setSelectedSchedule(sch.schedule_code)}
+                  >
+                    <span className="driver-schedule-time">{sch.start_time}</span>
+                    <span className={`driver-schedule-state ${selectedSchedule === sch.schedule_code ? 'is-active' : ''}`}>
+                      {selectedSchedule === sch.schedule_code ? 'กำลังปฏิบัติงาน' : 'รอดำเนินการ'}
+                    </span>
+                    <span className="driver-schedule-route">{sch.route_name}</span>
+                  </button>
+                ))}
               </div>
-
-              {/* ปุ่มกดไปสถานีถัดไป (ปุ่มเดียวใหญ่ๆ) เลื่อนมาไว้ด้านล่างสุดของรายการจุดจอด */}
-              {nextStop ? (
-                <button 
-                  className="btn btn-primary w-100 rounded-pill fw-bold py-3 shadow-sm fs-5"
-                  onClick={() => handleArriveAtStop(nextStop.log_code, nextStop.stop_name)}
-                >
-                  มุ่งหน้าไป: {nextStop.stop_name} (กดเมื่อถึง)
-                </button>
-              ) : (
-                <div className="alert alert-success text-center fw-bold rounded-4 mb-0">
-                  🎉 รถเดินทางถึงปลายทางเรียบร้อยแล้ว
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {selectedSchedule && (
-          <div className="mb-3">
-            <div 
-              className="driver-passenger-toggle d-flex justify-content-between align-items-center bg-white p-3 rounded-4 shadow-sm mb-3"
-              onClick={() => setIsPassengerListOpen(!isPassengerListOpen)}
-            >
-              <h5 className="mb-0 fw-bold driver-passenger-title">
-                รายชื่อผู้โดยสารในรอบนี้ {isPassengerListOpen ? "▼" : "▶"}
-              </h5>
-              <span className="badge bg-primary rounded-pill px-3 py-2">ยอดรวม {passengers.length} คน</span>
-            </div>
-
-            {isPassengerListOpen && (
-              loading ? (
-                <div className="text-center py-5"><div className="spinner-border text-primary" role="status"></div></div>
-              ) : passengers.length === 0 ? (
-                <div className="text-center py-4 bg-white rounded-4 shadow-sm"><p className="text-muted mb-0">ไม่มีผู้โดยสารจองในรอบนี้</p></div>
-              ) : (
-                <div className="d-flex flex-column gap-3 mb-5">
-                  {passengers.map((p) => (
-                    <div key={p.booking_code} className={`card border-0 shadow-sm rounded-4 ${p.status !== 'ACTIVE' ? 'opacity-75 bg-light' : ''}`}>
-                      <div className="card-body p-3">
-                        <div className="d-flex justify-content-between align-items-start mb-3">
-                          <div>
-                            <h5 className="fw-bold mb-1">{p.passenger_name}</h5>
-                            <span className="text-muted small">รหัส: {p.booking_code}</span>
-                          </div>
-                          {renderStatusBadge(p.status)}
-                        </div>
-                        
-                        {p.status === 'ACTIVE' && (
-                          <div className="d-flex gap-2 mt-2">
-                            <button className="btn btn-outline-success flex-grow-1 fw-bold py-2 rounded-4" onClick={() => handleUpdateStatus(p.booking_code, 'COMPLETED')}>
-                              ✓ กดเช็คอิน
-                            </button>
-                            <button className="btn btn-outline-secondary flex-grow-1 fw-bold py-2 rounded-4" onClick={() => handleUpdateStatus(p.booking_code, 'NO_SHOW')}>
-                              ✗ ไม่มา
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )
             )}
           </div>
-        )}
 
-        {selectedSchedule && !isScanning && (
-          <button 
-            className="driver-scan-btn btn btn-dark shadow-lg rounded-pill fw-bold"
-            onClick={() => setIsScanning(true)}
-          >
-            📷 สแกน QR (จำลอง)
-          </button>
-        )}
-
-        {isScanning && (
-          <div className="modal fade show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0, 0, 0, 0.8)', zIndex: 1050 }}>
-            <div className="modal-dialog modal-dialog-centered">
-              <div className="modal-content border-0 rounded-4 shadow-lg">
-                <div className="modal-header bg-light border-bottom-0">
-                  <h5 className="modal-title fw-bold">จำลองสแกน QR Code</h5>
-                  <button type="button" className="btn-close" onClick={() => setIsScanning(false)}></button>
+          {/* แผงควบคุมหลัก */}
+          <div className="driver-main-panel">
+            {selectedSchedule ? (
+              <>
+                <div className="driver-trip-summary">
+                  <div>
+                    <span className="driver-summary-time">รอบเวลาเดินรถ</span>
+                    <h2>เส้นทางเดินรถมหาวิทยาลัย</h2>
+                    <p>สถานะรอบปัจจุบันกำลังให้บริการ</p>
+                  </div>
+                  <div className="driver-seat-count">
+                    <strong>{passengers.filter(p => p.status === 'COMPLETED').length}/{passengers.length}</strong>
+                    <span>เช็คอินแล้ว</span>
+                  </div>
+                  <div className="driver-seat-track">
+                    <span style={{ width: `${(passengers.filter(p => p.status === 'COMPLETED').length / (passengers.length || 1)) * 100}%` }}></span>
+                  </div>
                 </div>
-                <div className="modal-body p-4 text-center">
-                  <p className="text-muted mb-4">พิมพ์รหัส Booking Code (เช่น BK_TEST01)</p>
-                  <input 
-                    type="text" 
-                    className="form-control form-control-lg text-center mb-3 fw-bold text-primary" 
-                    value={fakeQrText}
-                    onChange={(e) => setFakeQrText(e.target.value)}
-                    autoFocus
-                  />
-                  <button className="btn btn-success btn-lg w-100 fw-bold rounded-pill shadow-sm" onClick={handleScanSuccess}>
-                    ยืนยัน
+
+                {/* ปุ่มเปิดกล้องสแกน QR จริง */}
+                <button 
+                  className="driver-scan-btn"
+                  onClick={() => setIsScanning(true)}
+                >
+                  <QrCode size={18} />
+                  เปิดกล้องสแกน QR Code ผู้โดยสาร
+                </button>
+
+                {/* จุดจอดรถ */}
+                <div className="driver-route-section">
+                  <h2>
+                    <MapPin size={18} className="text-danger" />
+                    สถานีจุดจอดตามกำหนด
+                  </h2>
+                  <div className="driver-stop-list">
+                    {tripLogs.map((log, index) => {
+                      const isArrived = log.actual_time !== null;
+                      const isNext = nextStop && nextStop.log_code === log.log_code;
+                      return (
+                        <div key={log.log_code} className={`driver-stop-row ${isNext ? 'is-next' : ''}`}>
+                          <div className="driver-stop-info">
+                            <div className={`driver-stop-marker ${isArrived ? 'is-arrived' : ''}`}>
+                              {isArrived ? <Check size={14} /> : isNext ? <Bus size={14} /> : index + 1}
+                            </div>
+                            <div>
+                              <h3 className={`${isArrived ? 'is-arrived' : ''} ${isNext ? 'is-next' : ''}`}>{log.stop_name}</h3>
+                              <span className="driver-eta-text"><Clock size={12} /> คาดการณ์: <strong>{log.expected_time}</strong></span>
+                            </div>
+                          </div>
+                          <div className="driver-stop-state">
+                            {isArrived ? (
+                              <span className="driver-stop-arrived">ถึงแล้ว ({log.actual_time})</span>
+                            ) : isNext ? (
+                              <span className="driver-stop-next">กำลังไป</span>
+                            ) : (
+                              <span className="driver-stop-waiting">รอคิว</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {nextStop ? (
+                    <button 
+                      className="driver-arrive-btn"
+                      onClick={() => handleArriveAtStop(nextStop.log_code, nextStop.stop_name)}
+                    >
+                      <Navigation size={16} className="me-1" /> บันทึกถึงจุดจอด: {nextStop.stop_name}
+                    </button>
+                  ) : (
+                    <div className="driver-route-complete">
+                      <CheckCircle2 size={16} className="me-1" /> สิ้นสุดเส้นทางเดินรถรอบนี้เรียบร้อยแล้ว
+                    </div>
+                  )}
+                </div>
+
+                {/* รายชื่อผู้โดยสาร */}
+                <div className="driver-passenger-section">
+                  <button 
+                    className="driver-passenger-toggle"
+                    onClick={() => setIsPassengerListOpen(!isPassengerListOpen)}
+                  >
+                    <span>
+                      <Users size={18} className="text-danger" />
+                      รายชื่อผู้โดยสารในรอบนี้ <small>({passengers.length} คน)</small>
+                    </span>
+                    <ChevronDown size={18} className={`driver-chevron ${isPassengerListOpen ? 'is-open' : ''}`} />
                   </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
+                  {isPassengerListOpen && (
+                    <div className="driver-passenger-list">
+                      {loading ? (
+                        <div className="text-center py-4 text-muted">กำลังโหลดข้อมูล...</div>
+                      ) : passengers.length === 0 ? (
+                        <div className="driver-empty">ไม่มีผู้โดยสารจองรอบนี้</div>
+                      ) : (
+                        passengers.map((p) => (
+                          <div key={p.booking_code} className={`driver-passenger-row ${p.status !== 'ACTIVE' ? 'is-complete' : ''}`}>
+                            <div className="driver-passenger-details">
+                              <h3>{p.passenger_name}</h3>
+                              <div>
+                                <span>รหัสตั๋ว: {p.booking_code}</span>
+                              </div>
+                            </div>
+                            <div className="d-flex align-items-center gap-2">
+                              <span className={`driver-status ${p.status === 'ACTIVE' ? 'driver-status-waiting' : p.status === 'COMPLETED' ? 'driver-status-complete' : 'driver-status-noshow'}`}>
+                                {p.status === 'ACTIVE' ? 'รอขึ้นรถ' : p.status === 'COMPLETED' ? 'ขึ้นรถแล้ว' : 'ไม่มา'}
+                              </span>
+                              {p.status === 'ACTIVE' && (
+                                <div className="driver-passenger-actions">
+                                  <button className="driver-checkin-btn" onClick={() => handleUpdateStatus(p.booking_code, 'COMPLETED')}>
+                                    <Check size={12} /> เช็คอิน
+                                  </button>
+                                  <button className="driver-noshow-btn" onClick={() => handleUpdateStatus(p.booking_code, 'NO_SHOW')}>
+                                    <UserX size={12} /> ไม่มา
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="driver-empty driver-no-selection">
+                กรุณาเลือกรอบรถจากแถบด้านซ้ายเพื่อเริ่มปฏิบัติงาน
+              </div>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Modal เปิดกล้องสแกน QR Code จริงผ่านมือถือหรือเว็บแคม */}
+      {isScanning && (
+        <div className="driver-scan-overlay">
+          <div className="driver-scan-dialog">
+            <div className="driver-scan-header">
+              <h2>สแกนตั๋ว QR Code ผู้โดยสาร</h2>
+              <button className="driver-close-scan" onClick={() => setIsScanning(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            {/* Element สำคัญสำหรับแสดง Video Stream จากกล้อง */}
+            <div id="real-qr-reader" className="driver-qr-reader"></div>
+            <p className="mt-3 text-muted small">กรุณาหันกล้องไปที่ QR Code ของผู้โดยสาร ระบบจะบันทึกสถานะลงฐานข้อมูลให้อัตโนมัติ</p>
+          </div>
+        </div>
+      )}
     </>
   );
 }
