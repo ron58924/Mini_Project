@@ -123,7 +123,7 @@ function Permission() {
       title: "เพิ่มกลุ่มผู้ใช้งาน (Add Role)",
       html: `
         <div class="text-start mb-3">
-          <label class="form-label text-muted d-block">รหัสระบบจะสร้างให้: <strong class="text-primary">${nextCode}</strong></label>
+          <label class="form-label text-muted d-block">รหัสระบบจะสร้างให้: <strong class="text-danger">${nextCode}</strong></label>
         </div>
         <div class="text-start">
           <label class="form-label fw-bold">ชื่อ Role (เช่น Manager, Support)</label>
@@ -132,7 +132,7 @@ function Permission() {
       `,
       focusConfirm: false,
       showCancelButton: true,
-      confirmButtonColor: "#d32f2f",
+      confirmButtonColor: "#be123c",
       confirmButtonText: "บันทึกข้อมูล",
       cancelButtonText: "ยกเลิก",
       preConfirm: () => {
@@ -145,7 +145,7 @@ function Permission() {
     if (roleName) {
       try {
         await axios.post(`${API_URL}/roles`, { role_code: nextCode, role_name: roleName });
-        Swal.fire({ icon: "success", title: "สำเร็จ", text: `เพิ่มสิทธิ์ ${roleName} (${nextCode}) เรียบร้อยแล้ว`, timer: 1500, showConfirmButton: false });
+        Swal.fire({ icon: "success", title: "สำเร็จ", text: `เพิ่มสิทธิ์ ${roleName} เรียบร้อยแล้ว`, timer: 1500, showConfirmButton: false });
         await fetchRoles(); 
         setSelectedRole(nextCode); 
       } catch (error) {
@@ -161,7 +161,7 @@ function Permission() {
       input: "text",
       inputValue: role.role_name,
       showCancelButton: true,
-      confirmButtonColor: "#d32f2f",
+      confirmButtonColor: "#be123c",
       confirmButtonText: "บันทึกการแก้ไข",
       cancelButtonText: "ยกเลิก",
       inputValidator: (value) => {
@@ -187,7 +187,7 @@ function Permission() {
       text: `คุณต้องการลบสิทธิ์รหัส ${roleCode} ใช่หรือไม่?`,
       icon: "warning",
       showCancelButton: true,
-      confirmButtonColor: "#d32f2f",
+      confirmButtonColor: "#dc2626",
       cancelButtonColor: "#6c757d",
       confirmButtonText: "ใช่, ลบเลย!",
       cancelButtonText: "ยกเลิก"
@@ -227,7 +227,7 @@ function Permission() {
       title: "เพิ่มหน้าจอระบบ (Add Screen)",
       html: `
         <div class="text-start mb-3">
-          <label class="form-label text-muted d-block">รหัสหน้าจอระบบจะสร้างให้: <strong class="text-primary">${nextCode}</strong></label>
+          <label class="form-label text-muted d-block">รหัสหน้าจอระบบจะสร้างให้: <strong class="text-danger">${nextCode}</strong></label>
         </div>
         <div class="text-start">
           <label class="form-label fw-bold">ชื่อหน้าจอ (เช่น ข้อมูลผู้โดยสาร, รายงาน)</label>
@@ -236,7 +236,7 @@ function Permission() {
       `,
       focusConfirm: false,
       showCancelButton: true,
-      confirmButtonColor: "#0d6efd",
+      confirmButtonColor: "#be123c",
       confirmButtonText: "บันทึกข้อมูล",
       cancelButtonText: "ยกเลิก",
       preConfirm: () => {
@@ -263,7 +263,7 @@ function Permission() {
       input: "text",
       inputValue: screen.screen_name,
       showCancelButton: true,
-      confirmButtonColor: "#0d6efd",
+      confirmButtonColor: "#be123c",
       confirmButtonText: "บันทึกการแก้ไข",
       cancelButtonText: "ยกเลิก",
       inputValidator: (value) => {
@@ -288,7 +288,7 @@ function Permission() {
       text: `คุณต้องการลบหน้าจอ ${screenCode} ใช่หรือไม่? ข้อมูลสิทธิ์ที่ผูกกับหน้าจอนี้จะถูกลบออกด้วย`,
       icon: "warning",
       showCancelButton: true,
-      confirmButtonColor: "#d32f2f",
+      confirmButtonColor: "#dc2626",
       cancelButtonColor: "#6c757d",
       confirmButtonText: "ใช่, ลบเลย!",
       cancelButtonText: "ยกเลิก"
@@ -309,60 +309,62 @@ function Permission() {
   const currentRoleName = roles.find((r) => r.role_code === selectedRole)?.role_name || "";
 
   return (
-    <>
+    <div className="permission-page" style={{ backgroundColor: "#fafafa", minHeight: "100vh" }}>
       <Navbar />
-      <div className="permission-page container-fluid py-4 px-lg-5 min-vh-100">
+      <div className="container py-4 px-lg-4">
+        
+        {/* Header */}
         <div className="d-flex justify-content-between align-items-center mb-4">
-          <h2>จัดการสิทธิ์การใช้งาน และ หน้าจอระบบ</h2>
+          <h2 className="fw-bold text-dark mb-0" style={{ fontSize: "28px" }}>
+            จัดการสิทธิ์และหน้าจอระบบ (Permissions)
+          </h2>
           {selectedRole && (
-            <button className="btn btn-outline-primary" onClick={() => setSelectedRole("")}>
+            <button className="btn btn-outline-secondary rounded-pill fw-bold px-4" onClick={() => setSelectedRole("")}>
               ⚙️ กลับไปหน้าจัดการหน้าจอ (Screens Master)
             </button>
           )}
         </div>
 
         <div className="row g-4">
-          
           {/* =====================================================
               ฝั่งซ้าย: รายชื่อกลุ่มผู้ใช้งาน (Roles List)
           ===================================================== */}
           <div className="col-lg-4">
-            <div className="card shadow-sm sticky-top" style={{ top: "20px" }}>
-              <div className="card-body p-0">
-                <div className="p-4 d-flex justify-content-between align-items-center border-bottom">
-                  <h5 className="mb-0 fw-bold">กลุ่มผู้ใช้งาน (Roles)</h5>
-                  <button className="btn btn-sm btn-outline-secondary px-3" onClick={handleAddRole}>
-                    + เพิ่ม Role
-                  </button>
-                </div>
-                
-                <div className="list-group list-group-flush" style={{ maxHeight: "calc(100vh - 200px)", overflowY: "auto" }}>
-                  {roles.length === 0 ? (
-                    <div className="p-4 text-center text-muted">ไม่พบข้อมูล Role</div>
-                  ) : (
-                    roles.map((r) => (
-                      <div
-                        key={r.role_code}
-                        className={`list-group-item list-group-item-action py-3 px-4 d-flex justify-content-between align-items-center border-bottom ${
-                          selectedRole === r.role_code ? "active" : ""
-                        }`}
-                        onClick={() => setSelectedRole(r.role_code)}
-                        style={{ cursor: "pointer", transition: "0.2s" }}
-                      >
-                        <div>
-                          <div className="fs-5 fw-bold">{r.role_name}</div>
-                          <small className={`d-block mt-1 ${selectedRole === r.role_code ? "text-light opacity-75" : "text-muted"}`}>
-                            รหัส: {r.role_code}
-                          </small>
+            <div className="card border-0 shadow-sm rounded-4 sticky-top" style={{ top: "20px", overflow: "hidden" }}>
+              <div className="card-header bg-white p-4 d-flex justify-content-between align-items-center border-bottom">
+                <h5 className="mb-0 fw-bold text-dark">กลุ่มผู้ใช้งาน (Roles)</h5>
+                <button className="btn btn-mut-red btn-sm px-3" onClick={handleAddRole}>
+                  + เพิ่ม Role
+                </button>
+              </div>
+              
+              <div className="card-body p-0" style={{ maxHeight: "calc(100vh - 200px)", overflowY: "auto" }}>
+                {roles.length === 0 ? (
+                  <div className="p-5 text-center text-muted">ไม่พบข้อมูล Role</div>
+                ) : (
+                  roles.map((r) => (
+                    <div
+                      key={r.role_code}
+                      className={`role-list-item p-3 px-4 d-flex justify-content-between align-items-center ${
+                        selectedRole === r.role_code ? "active" : ""
+                      }`}
+                      onClick={() => setSelectedRole(r.role_code)}
+                    >
+                      <div>
+                        <div className="role-title fs-6 fw-bold text-dark">
+                          {r.role_name}
                         </div>
-                        <div className="d-flex gap-2">
-                          <button className={`btn btn-sm ${selectedRole === r.role_code ? 'btn-light text-primary' : 'btn-outline-secondary'}`} onClick={(e) => handleEditRole(e, r)} title="แก้ไขชื่อ Role">✏️</button>
-                          <button className={`btn btn-sm ${selectedRole === r.role_code ? 'btn-light text-danger' : 'btn-outline-danger'}`} onClick={(e) => handleDeleteRole(e, r.role_code)} title="ลบ Role">🗑️</button>
-                        </div>
+                        <small className={`d-block mt-1 ${selectedRole === r.role_code ? "text-danger" : "text-secondary"}`}>
+                          รหัส: {r.role_code}
+                        </small>
                       </div>
-                    ))
-                  )}
-                </div>
+                      <div className="d-flex gap-2">
+                        <button className="btn btn-edit-action" onClick={(e) => handleEditRole(e, r)} title="แก้ไข">✏️</button>
+                        <button className="btn btn-delete-action" onClick={(e) => handleDeleteRole(e, r.role_code)} title="ลบ">🗑️</button>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -371,23 +373,23 @@ function Permission() {
               ฝั่งขวา: ตารางจัดการสิทธิ์ / จัดการหน้าจอ
           ===================================================== */}
           <div className="col-lg-8">
-            <div className="card shadow-sm h-100">
+            <div className="card border-0 shadow-sm rounded-4 h-100 overflow-hidden">
               
               {/* กรณีที่ยังไม่เลือก Role -> จะแสดงหน้า จัดการหน้าจอระบบ (Screen Master) แทน */}
               {!selectedRole ? (
                 <>
-                  <div className="p-4 d-flex justify-content-between align-items-center border-bottom bg-light rounded-top">
-                    <h5 className="mb-0 fw-bold text-primary">⚙️ จัดการหน้าจอระบบ (Screen Master)</h5>
-                    <button className="btn btn-sm btn-primary px-3" onClick={handleAddScreen}>+ เพิ่มหน้าจอ</button>
+                  <div className="card-header bg-white p-4 d-flex justify-content-between align-items-center border-bottom">
+                    <h5 className="mb-0 fw-bold" style={{ color: "#3d080b" }}>⚙️ จัดการหน้าจอระบบ (Screen Master)</h5>
+                    <button className="btn btn-mut-red btn-sm px-4" onClick={handleAddScreen}>+ เพิ่มหน้าจอ</button>
                   </div>
-                  <div className="card-body p-0">
-                    <div className="table-responsive" style={{ maxHeight: "calc(100vh - 220px)", overflowY: "auto" }}>
-                      <table className="table table-hover align-middle mb-0">
-                        <thead className="table-light text-secondary sticky-top">
-                          <tr>
-                            <th className="border-0 ps-4" style={{ width: "15%" }}>รหัส</th>
-                            <th className="border-0">ชื่อหน้าจอ (Screen Name)</th>
-                            <th className="text-end border-0 pe-4" style={{ width: "20%" }}>จัดการ</th>
+                  <div className="card-body p-4 bg-white">
+                    <div className="table-responsive table-custom-wrapper">
+                      <table className="table table-custom align-middle mb-0">
+                        <thead>
+                          <tr className="table-custom-header">
+                            <th className="ps-4 py-3" style={{ width: "15%" }}>รหัส</th>
+                            <th className="py-3">ชื่อหน้าจอ (Screen Name)</th>
+                            <th className="text-end pe-4 py-3" style={{ width: "20%" }}>จัดการ</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -396,11 +398,11 @@ function Permission() {
                           ) : (
                             screens.map((s) => (
                               <tr key={s.screen_code}>
-                                <td className="ps-4 fw-bold text-muted">{s.screen_code}</td>
-                                <td className="fs-5 text-dark fw-semibold">{s.screen_name}</td>
+                                <td className="ps-4 fw-medium text-muted">{s.screen_code}</td>
+                                <td className="fs-6 text-dark fw-semibold">{s.screen_name}</td>
                                 <td className="text-end pe-4">
-                                  <button className="btn btn-sm btn-outline-secondary rounded-circle p-2 me-2" onClick={() => handleEditScreen(s)} title="แก้ไข">✏️️</button>
-                                  <button className="btn btn-sm btn-outline-danger rounded-circle p-2" onClick={() => handleDeleteScreen(s.screen_code)} title="ลบ">🗑️</button>
+                                  <button className="btn btn-edit-action me-2" onClick={() => handleEditScreen(s)} title="แก้ไข">แก้ไข</button>
+                                  <button className="btn btn-delete-action" onClick={() => handleDeleteScreen(s.screen_code)} title="ลบ">ลบ</button>
                                 </td>
                               </tr>
                             ))
@@ -414,22 +416,22 @@ function Permission() {
                 
                 // กรณีเลือก Role แล้ว -> แสดงหน้า ติ๊กสิทธิ์การเข้าถึง (Permission Matrix)
                 <>
-                  <div className="card-body p-0">
-                    <div className="p-4 d-flex justify-content-between align-items-center border-bottom">
-                      <h5 className="mb-0 fw-bold" style={{ color: "#9a0007" }}>
-                        สิทธิ์การเข้าถึงของ: {currentRoleName}
-                      </h5>
-                      <span className="badge bg-primary fs-6 px-3 py-2 rounded-pill">
-                        เปิดใช้งาน {checkedCount} / {permissions.length} หน้าจอ
-                      </span>
-                    </div>
+                  <div className="card-header bg-white p-4 d-flex justify-content-between align-items-center border-bottom">
+                    <h5 className="mb-0 fw-bold" style={{ color: "#3d080b" }}>
+                      สิทธิ์การเข้าถึงของ: <span style={{ color: "#be123c" }}>{currentRoleName}</span>
+                    </h5>
+                    <span className="badge fs-6 px-3 py-2 rounded-pill" style={{ backgroundColor: "#fef2f2", color: "#be123c", border: "1px solid #fecdd3" }}>
+                      เปิดใช้งาน {checkedCount} / {permissions.length} หน้าจอ
+                    </span>
+                  </div>
 
-                    <div className="table-responsive" style={{ maxHeight: "calc(100vh - 280px)", overflowY: "auto" }}>
-                      <table className="table table-hover align-middle mb-0">
-                        <thead className="table-light text-secondary sticky-top">
-                          <tr>
-                            <th className="text-center border-0" style={{ width: "120px" }}>เปิดใช้งาน</th>
-                            <th className="border-0">ชื่อหน้าจอ (Screen Name)</th>
+                  <div className="card-body p-4 bg-white">
+                    <div className="table-responsive table-custom-wrapper">
+                      <table className="table table-custom align-middle mb-0">
+                        <thead>
+                          <tr className="table-custom-header">
+                            <th className="text-center py-3" style={{ width: "120px" }}>เปิดใช้งาน</th>
+                            <th className="py-3">ชื่อหน้าจอ (Screen Name)</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -439,19 +441,17 @@ function Permission() {
                             <tr><td colSpan="2" className="text-center py-5 text-muted">ไม่มีข้อมูลหน้าจอในระบบ</td></tr>
                           ) : (
                             permissions.map((p) => (
-                              <tr key={p.screen_code} className={p.checked ? "table-primary" : ""}>
-                                <td className="text-center">
-                                  <div className="form-check d-flex justify-content-center">
-                                    <input
-                                      type="checkbox"
-                                      className="form-check-input m-0"
-                                      style={{ width: "24px", height: "24px", cursor: "pointer" }}
-                                      checked={p.checked}
-                                      onChange={() => toggleScreen(p.screen_code)}
-                                    />
-                                  </div>
+                              <tr key={p.screen_code}>
+                                <td className="text-center py-3">
+                                  <input
+                                    type="checkbox"
+                                    className="form-check-input"
+                                    style={{ width: "22px", height: "22px", cursor: "pointer" }}
+                                    checked={p.checked}
+                                    onChange={() => toggleScreen(p.screen_code)}
+                                  />
                                 </td>
-                                <td className={p.checked ? "fw-bold fs-5" : "text-muted fs-5"} style={{ color: p.checked ? "#9a0007" : "inherit" }}>
+                                <td className={p.checked ? "fw-bold text-dark" : "text-muted fw-medium"}>
                                   {p.screen_name}
                                 </td>
                               </tr>
@@ -462,8 +462,8 @@ function Permission() {
                     </div>
                   </div>
                   
-                  <div className="card-footer bg-white py-4 border-top text-end">
-                    <button type="button" className="btn btn-primary px-4 fw-bold" onClick={handleSave} disabled={saving}>
+                  <div className="card-footer bg-light p-4 border-top text-end rounded-bottom-4">
+                    <button type="button" className="btn btn-mut-red px-5" onClick={handleSave} disabled={saving}>
                       {saving ? "กำลังบันทึก..." : "บันทึกการแก้ไขสิทธิ์"}
                     </button>
                   </div>
@@ -474,7 +474,7 @@ function Permission() {
 
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
