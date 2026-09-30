@@ -1,8 +1,15 @@
+<<<<<<< HEAD
 import React, { useState, useEffect, useRef } from 'react';
 import Navbar from './Navbar'; 
 import './Booking.css'; 
 import { useAuth } from './context/AuthContext'; 
 import { MapPin, Navigation, Users, Clock, Info, ShoppingBag, Trash2, CheckCircle2, XCircle, Search, CalendarDays, ChevronDown, AlertCircle, HelpCircle } from 'lucide-react';
+=======
+import { useState, useEffect } from 'react';
+import Navbar from './Navbar'; 
+import './Booking.css'; 
+import { useAuth } from './context/AuthContext'; 
+>>>>>>> 9a12c673ebdeccd7243806b1cd8afb8ca6f9ee15
 import { QRCodeSVG } from 'qrcode.react';
 
 const Booking = () => {
@@ -24,6 +31,7 @@ const Booking = () => {
 
   const [cart, setCart] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [confirmedTickets, setConfirmedTickets] = useState([]);
 
   const [historyBookings, setHistoryBookings] = useState([]);
   const [historyFilter, setHistoryFilter] = useState('ACTIVE');
@@ -167,6 +175,7 @@ const Booking = () => {
     setIsSubmitting(true);
     let successCount = 0;
     let failMessages = [];
+    const createdTickets = [];
 
     try {
       for (const item of cart) {
@@ -186,14 +195,19 @@ const Booking = () => {
         
         if (response.ok) {
           successCount++;
+          createdTickets.push({ ...item, ...result });
         } else {
           // เก็บรายละเอียด Error ของแต่ละรายการไว้
           failMessages.push(`- ${item.route_name}: ${result.message}`);
         }
       }
 
+<<<<<<< HEAD
       fetchHistoryBookings(); // รีเฟรชโควต้าหลังจองเสร็จ
 
+=======
+      setConfirmedTickets(createdTickets);
+>>>>>>> 9a12c673ebdeccd7243806b1cd8afb8ca6f9ee15
       if (successCount === cart.length) {
         setCart([]);
         setActiveTab('history');
@@ -548,7 +562,30 @@ const Booking = () => {
               )}
 
             </div>
+<<<<<<< HEAD
           </div>
+=======
+          )}
+
+          {confirmedTickets.length > 0 && (
+            <section className="booking-confirmed-tickets" aria-live="polite">
+              <h3>ตั๋วที่จองสำเร็จ</h3>
+              <div className="booking-ticket-list">
+                {confirmedTickets.map((ticket) => (
+                  <article className="booking-ticket" key={ticket.booking_code}>
+                    <div>
+                      <strong>{ticket.route_name} · {ticket.schedule_time}</strong>
+                      <span>รหัสจอง {ticket.booking_code}</span>
+                      <span>ขึ้น {ticket.pickup_name} · ลง {ticket.dropoff_name}</span>
+                    </div>
+                    <QRCodeSVG value={ticket.qr_code} size={128} level="M" title={`QR ตั๋ว ${ticket.booking_code}`} />
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+
+>>>>>>> 9a12c673ebdeccd7243806b1cd8afb8ca6f9ee15
         </div>
       </div>
     </div>
