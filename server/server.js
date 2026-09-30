@@ -794,9 +794,16 @@ app.get("/api/driver/schedules", async (req, res) => {
   try {
     connection = await getConnection();
     const query = `
-      SELECT s.schedule_code, s.start_time, r.route_name
+      SELECT s.schedule_code, s.start_time, r.route_name, v.capacity,
+             (SELECT NVL(SUM(b.passenger_count), 0)
+              FROM bookings b
+              JOIN trip_logs pickup_log ON b.pickup_log_code = pickup_log.log_code
+              WHERE pickup_log.schedule_code = s.schedule_code
+                AND TRUNC(b.travel_date) = TRUNC(SYSDATE)
+                AND b.status = 'COMPLETED') AS boarded_count
       FROM schedules s
       JOIN routes r ON s.route_code = r.route_code
+      JOIN vehicles v ON s.vehicle_code = v.vehicle_code
       WHERE s.driver_code = :driver_code
       ORDER BY s.start_time ASC
     `;
@@ -804,7 +811,9 @@ app.get("/api/driver/schedules", async (req, res) => {
     const schedules = result.rows.map(row => ({
       schedule_code: row[0],
       start_time: row[1],
-      route_name: row[2]
+      route_name: row[2],
+      capacity: row[3],
+      boarded_count: row[4]
     }));
     res.json(schedules);
   } catch (error) {
@@ -869,6 +878,61 @@ app.put("/api/bookings/:booking_code/status", async (req, res) => {
     res.json({ message: "Status updated successfully" });
   } catch (error) {
     res.status(500).json({ message: "Error updating status", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
+app.post("/api/driver/check-in", async (req, res) => {
+  const { qr_code, schedule_code } = req.body;
+  if (!qr_code || !schedule_code) {
+    return res.status(400).json({ message: "กรุณาระบุ QR Code และรอบรถ" });
+  }
+
+  let connection;
+  try {
+    connection = await getConnection();
+    const result = await connection.execute(
+      `SELECT b.booking_code, u.first_name || ' ' || u.last_name, b.status, tp.schedule_code
+       FROM bookings b
+       JOIN users u ON b.user_code = u.user_code
+       JOIN trip_logs tp ON b.pickup_log_code = tp.log_code
+       WHERE b.qr_code = :qr_code
+         AND TRUNC(b.travel_date) = TRUNC(SYSDATE)`,
+      { qr_code }
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "ไม่พบตั๋ว QR นี้สำหรับการเดินทางวันนี้" });
+    }
+
+    const [bookingCode, passengerName, status, bookingSchedule] = result.rows[0];
+    if (bookingSchedule !== schedule_code) {
+      return res.status(409).json({ message: "ตั๋วนี้เป็นของรอบรถอื่น" });
+    }
+    if (status !== "ACTIVE") {
+      return res.status(409).json({ message: "ตั๋วนี้ถูกใช้แล้วหรือถูกยกเลิก" });
+    }
+
+    const updateResult = await connection.execute(
+      `UPDATE bookings
+       SET status = 'COMPLETED'
+       WHERE booking_code = :booking_code
+         AND qr_code = :qr_code
+         AND status = 'ACTIVE'
+         AND TRUNC(travel_date) = TRUNC(SYSDATE)`,
+      { booking_code: bookingCode, qr_code },
+      { autoCommit: true }
+    );
+
+    if (updateResult.rowsAffected !== 1) {
+      return res.status(409).json({ message: "ตั๋วนี้ถูกเช็คอินไปแล้ว" });
+    }
+
+    res.json({ booking_code: bookingCode, passenger_name: passengerName, status: "COMPLETED" });
+  } catch (error) {
+    console.error("Driver check-in error:", error);
+    res.status(500).json({ message: "ไม่สามารถบันทึกการเช็คอินได้", error: error.message });
   } finally {
     if (connection) await connection.close();
   }
@@ -1286,6 +1350,7 @@ app.put('/api/bookings/:bookingCode/cancel', async (req, res) => {
     if (connection) await connection.close();
   }
 });
+
 // ==========================================
 // [เพิ่มใหม่] 1. ดึงข้อมูลจุดจอดทั้งหมด (ไม่แบ่งสาย) เพื่อทำ Dropdown
 // ==========================================
@@ -1404,10 +1469,10 @@ app.get('/api/booking/search', async (req, res) => {
 });
 
 // =========================================================================
-// [ API ฝั่งผู้ดูแลระบบ (Admin) - สำหรับหน้า ScheduleManager ]
+// [ API ฝั่งผู้ดูแลระบบ (Admin) ]
 // =========================================================================
 
-// 1. ดึงข้อมูลอ้างอิง Master Data (เส้นทาง, คนขับ, ยานพาหนะ)
+// 1. ดึง Master Data
 app.get('/api/admin/master-data', async (req, res) => {
   let connection;
   try {
@@ -1418,10 +1483,20 @@ app.get('/api/admin/master-data', async (req, res) => {
     const driversRes = await connection.execute(`SELECT user_code, first_name || ' ' || last_name FROM users WHERE role_code IN ('R02', 'EMP') ORDER BY user_code`);
     const drivers = driversRes.rows.map(d => ({ driver_code: d[0], driver_name: d[1] }));
 
-    const vehiclesRes = await connection.execute(`SELECT vehicle_code, capacity FROM vehicles ORDER BY vehicle_code`);
-    const vehicles = vehiclesRes.rows.map(v => ({ vehicle_code: v[0], capacity: v[1] }));
+    const vehiclesRes = await connection.execute(`
+      SELECT v.vehicle_code, v.capacity, v.license_plate, t.type_name 
+      FROM vehicles v
+      LEFT JOIN vehicle_types t ON v.type_code = t.type_code
+      ORDER BY v.vehicle_code
+    `);
+    const vehicles = vehiclesRes.rows.map(v => ({ 
+      vehicle_code: v[0], capacity: v[1], license_plate: v[2], type_name: v[3] 
+    }));
 
-    res.json({ routes, drivers, vehicles });
+    const vTypesRes = await connection.execute(`SELECT type_code, type_name FROM vehicle_types ORDER BY type_code`);
+    const vehicle_types = vTypesRes.rows.map(t => ({ type_code: t[0], type_name: t[1] }));
+
+    res.json({ routes, drivers, vehicles, vehicle_types });
   } catch (error) {
     res.status(500).json({ message: "Error fetching master data", error: error.message });
   } finally {
@@ -1429,7 +1504,7 @@ app.get('/api/admin/master-data', async (req, res) => {
   }
 });
 
-// 2. ดึงรายละเอียดป้ายของเส้นทางพร้อมเวลาเฉลี่ย (Route Details)
+// 2. ดึงรายละเอียดป้ายของเส้นทาง
 app.get('/api/admin/routes/:routeCode/details', async (req, res) => {
   let connection;
   try {
@@ -1437,10 +1512,8 @@ app.get('/api/admin/routes/:routeCode/details', async (req, res) => {
     connection = await getConnection();
     const result = await connection.execute(
       `SELECT rd.stop_order, rd.stop_code, s.stop_name, rd.avg_travel_minutes 
-       FROM route_details rd
-       JOIN stations s ON rd.stop_code = s.stop_code
-       WHERE rd.route_code = :routeCode
-       ORDER BY rd.stop_order`,
+       FROM route_details rd JOIN stations s ON rd.stop_code = s.stop_code
+       WHERE rd.route_code = :routeCode ORDER BY rd.stop_order`,
       { routeCode }
     );
     const details = result.rows.map(row => ({
@@ -1448,38 +1521,40 @@ app.get('/api/admin/routes/:routeCode/details', async (req, res) => {
     }));
     res.json(details);
   } catch (err) {
-    res.status(500).json({ message: "Error fetching route details", error: err.message });
+    res.status(500).json({ message: "Error", error: err.message });
   } finally {
     if (connection) await connection.close();
   }
 });
 
-// 3. สร้างรอบรถ (Auto Gen Code & Calculate Expected Time)
+// 3. สร้างรอบรถ (แก้บัคการรันรหัส Auto ให้เรียงลำดับสวยงาม SCH_XX)
 app.post('/api/admin/schedules/create', async (req, res) => {
   const { route_code, vehicle_code, driver_code, start_time, travel_date } = req.body;
   let connection;
   try {
     connection = await getConnection();
     
-    // Auto Generate Schedule Code
-    const dateStr = travel_date.replace(/-/g, '').slice(2);
-    const timestampCode = Math.floor(100 + Math.random() * 900);
-    const schedule_code = `SCH_${dateStr}_${timestampCode}`;
+    // ดึงรหัสล่าสุดเพื่อบวกเพิ่ม (เช่น จาก SCH_06 เป็น SCH_07)
+    const maxRes = await connection.execute(`SELECT schedule_code FROM schedules WHERE schedule_code LIKE 'SCH_%'`);
+    let maxNum = 0;
+    maxRes.rows.forEach(row => {
+      const num = parseInt(row[0].replace('SCH_', ''), 10);
+      if (!isNaN(num) && num > maxNum) maxNum = num;
+    });
+    const schedule_code = `SCH_${String(maxNum + 1).padStart(2, '0')}`;
 
     await connection.execute(
       `INSERT INTO schedules (schedule_code, route_code, vehicle_code, driver_code, start_time) VALUES (:1, :2, :3, :4, :5)`,
-      [schedule_code, route_code, vehicle_code, driver_code, start_time],
-      { autoCommit: false }
+      [schedule_code, route_code, vehicle_code, driver_code, start_time], { autoCommit: false }
     );
 
     const routeRes = await connection.execute(`SELECT stop_code, avg_travel_minutes FROM route_details WHERE route_code = :1 ORDER BY stop_order`, [route_code]);
-
     let cumulativeMinutes = 0;
     const baseDate = new Date(`${travel_date}T${start_time}:00`);
 
     for (let i = 0; i < routeRes.rows.length; i++) {
       const stop_code = routeRes.rows[i][0];
-      const avg_minutes = routeRes.rows[i][1];
+      const avg_minutes = routeRes.rows[i][1] || 0;
       
       cumulativeMinutes += avg_minutes;
       const expectedTime = new Date(baseDate.getTime() + cumulativeMinutes * 60000);
@@ -1488,13 +1563,11 @@ app.post('/api/admin/schedules/create', async (req, res) => {
 
       await connection.execute(
         `INSERT INTO trip_logs (log_code, schedule_code, stop_code, expected_timestamp) VALUES (:1, :2, :3, TO_TIMESTAMP(:4, 'YYYY-MM-DD HH24:MI:SS'))`,
-        [log_code, schedule_code, stop_code, exp_time_str],
-        { autoCommit: false }
+        [log_code, schedule_code, stop_code, exp_time_str], { autoCommit: false }
       );
     }
-
     await connection.commit();
-    res.status(201).json({ message: "สร้างรอบรถเรียบร้อยแล้ว!" });
+    res.status(201).json({ message: "สร้างรอบรถรหัส " + schedule_code + " เรียบร้อยแล้ว!" });
   } catch (error) {
     if (connection) await connection.rollback();
     res.status(500).json({ message: "ไม่สามารถสร้างรอบรถได้", error: error.message });
@@ -1509,7 +1582,10 @@ app.get('/api/admin/schedules', async (req, res) => {
   try {
     connection = await getConnection();
     const result = await connection.execute(`
-      SELECT s.schedule_code, r.route_name, s.start_time, v.vehicle_code, u.first_name
+      SELECT 
+        s.schedule_code, r.route_name, s.start_time, v.vehicle_code, u.first_name,
+        (SELECT TO_CHAR(MIN(expected_timestamp), 'YYYY-MM-DD') FROM trip_logs WHERE schedule_code = s.schedule_code) as travel_date,
+        s.driver_code
       FROM schedules s
       JOIN routes r ON s.route_code = r.route_code
       JOIN vehicles v ON s.vehicle_code = v.vehicle_code
@@ -1517,7 +1593,7 @@ app.get('/api/admin/schedules', async (req, res) => {
       ORDER BY s.schedule_code ASC
     `);
     const schedules = result.rows.map(row => ({
-      schedule_code: row[0], route_name: row[1], start_time: row[2], vehicle_code: row[3], driver_name: row[4]
+      schedule_code: row[0], route_name: row[1], start_time: row[2], vehicle_code: row[3], driver_name: row[4], travel_date: row[5], driver_code: row[6]
     }));
     res.json(schedules);
   } catch (error) {
@@ -1527,7 +1603,26 @@ app.get('/api/admin/schedules', async (req, res) => {
   }
 });
 
-// 5. ลบรอบรถ
+// 5. แก้ไขรอบรถ (อัปเดตยานพาหนะและคนขับ)
+app.put('/api/admin/schedules/:code', async (req, res) => {
+  const { code } = req.params;
+  const { vehicle_code, driver_code } = req.body;
+  let connection;
+  try {
+    connection = await getConnection();
+    await connection.execute(
+      `UPDATE schedules SET vehicle_code = :1, driver_code = :2 WHERE schedule_code = :3`,
+      [vehicle_code, driver_code, code], { autoCommit: true }
+    );
+    res.json({ message: "อัปเดตข้อมูลรอบรถสำเร็จ" });
+  } catch (err) {
+    res.status(500).json({ message: "ไม่สามารถอัปเดตได้", error: err.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
+// 6. ลบรอบรถ
 app.delete('/api/admin/schedules/:code', async (req, res) => {
   const { code } = req.params;
   let connection;
@@ -1545,13 +1640,16 @@ app.delete('/api/admin/schedules/:code', async (req, res) => {
   }
 });
 
-// 6. จัดการยานพาหนะ (เพิ่ม / ลบ)
+// 7. จัดการยานพาหนะ
 app.post('/api/admin/vehicles', async (req, res) => {
-  const { vehicle_code, capacity } = req.body;
+  const { vehicle_code, type_code, license_plate, capacity } = req.body;
   let connection;
   try {
     connection = await getConnection();
-    await connection.execute(`INSERT INTO vehicles (vehicle_code, capacity) VALUES (:1, :2)`, [vehicle_code, capacity], { autoCommit: true });
+    await connection.execute(
+      `INSERT INTO vehicles (vehicle_code, type_code, license_plate, capacity) VALUES (:1, :2, :3, :4)`, 
+      [vehicle_code, type_code, license_plate, parseInt(capacity)], { autoCommit: true }
+    );
     res.status(201).json({ message: "เพิ่มยานพาหนะสำเร็จ" });
   } catch (err) {
     res.status(500).json({ message: "รหัสยานพาหนะอาจซ้ำกัน", error: err.message });
@@ -1574,7 +1672,7 @@ app.delete('/api/admin/vehicles/:code', async (req, res) => {
   }
 });
 
-// 7. จัดการเส้นทาง (CRUD Route Details)
+// 8. จัดการเส้นทาง (CRUD Route Details)
 app.put('/api/admin/routes/:code/details', async (req, res) => {
   const { code } = req.params;
   const { route_name, details } = req.body;
@@ -1589,13 +1687,11 @@ app.put('/api/admin/routes/:code/details', async (req, res) => {
     }
 
     await connection.execute(`DELETE FROM route_details WHERE route_code = :1`, [code], { autoCommit: false });
-
     for (let i = 0; i < details.length; i++) {
       const stop = details[i];
       await connection.execute(
         `INSERT INTO route_details (route_code, stop_code, stop_order, avg_travel_minutes) VALUES (:1, :2, :3, :4)`,
-        [code, stop.stop_code, i + 1, stop.avg_travel_minutes],
-        { autoCommit: false }
+        [code, stop.stop_code, i + 1, parseInt(stop.avg_travel_minutes) || 0], { autoCommit: false }
       );
     }
     await connection.commit();
@@ -1603,6 +1699,67 @@ app.put('/api/admin/routes/:code/details', async (req, res) => {
   } catch (err) {
     if (connection) await connection.rollback();
     res.status(500).json({ message: "ไม่สามารถบันทึกเส้นทางได้", error: err.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
+app.delete('/api/admin/routes/:code', async (req, res) => {
+  const { code } = req.params;
+  let connection;
+  try {
+    connection = await getConnection();
+    await connection.execute(`DELETE FROM route_details WHERE route_code = :1`, [code], { autoCommit: false });
+    await connection.execute(`DELETE FROM routes WHERE route_code = :1`, [code], { autoCommit: false });
+    await connection.commit();
+    res.json({ message: "ลบเส้นทางเรียบร้อยแล้ว" });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    res.status(500).json({ message: "ไม่สามารถลบเส้นทางได้", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
+// 9. จัดการจุดจอด (STATIONS CRUD)
+app.post('/api/admin/stations', async (req, res) => {
+  const { stop_code, stop_name } = req.body;
+  let connection;
+  try {
+    connection = await getConnection();
+    await connection.execute(`INSERT INTO stations (stop_code, stop_name) VALUES (:1, :2)`, [stop_code, stop_name], { autoCommit: true });
+    res.status(201).json({ message: "เพิ่มจุดจอดสำเร็จ" });
+  } catch (err) {
+    res.status(500).json({ message: "รหัสจุดจอดอาจซ้ำกัน", error: err.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
+app.put('/api/admin/stations/:code', async (req, res) => {
+  const { code } = req.params;
+  const { stop_name } = req.body;
+  let connection;
+  try {
+    connection = await getConnection();
+    await connection.execute(`UPDATE stations SET stop_name = :1 WHERE stop_code = :2`, [stop_name, code], { autoCommit: true });
+    res.json({ message: "อัปเดตจุดจอดสำเร็จ" });
+  } catch (err) {
+    res.status(500).json({ message: "ไม่สามารถอัปเดตได้", error: err.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
+app.delete('/api/admin/stations/:code', async (req, res) => {
+  const { code } = req.params;
+  let connection;
+  try {
+    connection = await getConnection();
+    await connection.execute(`DELETE FROM stations WHERE stop_code = :1`, [code], { autoCommit: true });
+    res.json({ message: "ลบจุดจอดสำเร็จ" });
+  } catch (err) {
+    res.status(500).json({ message: "ไม่สามารถลบได้ อาจมีเส้นทางใช้งานป้ายนี้อยู่", error: err.message });
   } finally {
     if (connection) await connection.close();
   }
