@@ -1,252 +1,49 @@
-/* ===============================
-   Booking Page Styles
-=============================== */
-* {
-  box-sizing: border-box;
+/* =========================================
+   สไตล์สำหรับ Custom Dropdown ใหม่
+========================================= */
+.cursor-pointer {
+  cursor: pointer;
 }
 
-.booking-page-wrapper {
-  min-height: 100vh;
-  background-color: #f8fafc; /* พื้นหลังสีเทาอ่อน */
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding: 40px 20px;
-  font-family: 'Kanit', 'Prompt', sans-serif; /* แนะนำให้ใช้ฟอนต์ไทยสวยๆ */
-}
-
-.booking-card {
+.custom-dropdown-container {
+  position: relative;
   width: 100%;
-  max-width: 550px;
+}
+
+.custom-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px); /* ดันเมนูลงมาไม่ให้ทับข้อความเดิม */
+  left: 0;
+  width: 100%;
   background-color: #ffffff;
-  padding: 32px;
-  border-radius: 20px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05), 0 4px 6px rgba(0, 0, 0, 0.03);
-  border: 1px solid #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  max-height: 250px;
+  overflow-y: auto;
+  z-index: 9999; 
 }
 
-/* Header */
-.booking-header {
-  text-align: center;
-  margin-bottom: 32px;
-}
-
-.booking-title {
-  font-size: 28px;
-  font-weight: 800;
-  color: #0f172a;
-  margin: 0;
-  letter-spacing: -0.5px;
-}
-
-.booking-subtitle {
+.custom-dropdown-item {
+  padding: 12px 16px;
   font-size: 14px;
-  color: #64748b;
-  margin-top: 8px;
-}
-
-/* Form Structure */
-.booking-form {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.form-row {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-}
-
-.half-width {
-  flex: 1;
-}
-
-.form-label {
-  font-size: 14px;
-  font-weight: 600;
   color: #334155;
-  margin-bottom: 8px;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-/* Inputs & Selects */
-.form-control {
-  width: 100%;
-  padding: 14px 16px;
-  font-size: 15px;
-  color: #1e293b;
+.custom-dropdown-item:hover {
   background-color: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  outline: none;
-  transition: all 0.2s ease-in-out;
-  cursor: pointer;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
-}
-
-.form-control:focus {
-  background-color: #ffffff;
-  border-color: #3b82f6; /* สีน้ำเงินตอนคลิก */
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-}
-
-/* Submit Button */
-.form-submit-container {
-  margin-top: 12px;
-}
-
-.btn-submit {
-  width: 100%;
-  padding: 16px;
-  font-size: 16px;
-  font-weight: 700;
-  color: #ffffff;
-  background-color: #2563eb;
-  border: none;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2), 0 2px 4px -1px rgba(37, 99, 235, 0.1);
-}
-
-.btn-submit:hover:not(:disabled) {
-  background-color: #1d4ed8;
-  transform: translateY(-2px);
-  box-shadow: 0 6px 10px -1px rgba(37, 99, 235, 0.3);
-}
-
-.btn-submit:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.btn-submit:disabled {
-  background-color: #94a3b8;
-  cursor: not-allowed;
-  box-shadow: none;
-  opacity: 0.7;
-}
-
-/* Animation */
-@keyframes fadeInDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.fade-in-down {
-  animation: fadeInDown 0.4s ease-out forwards;
-}
-
-/* Responsive (สำหรับหน้าจอมือถือ) */
-@media screen and (max-width: 600px) {
-  .form-row {
-    flex-direction: column;
-    gap: 20px;
-  }
-  
-  .booking-card {
-    padding: 24px 20px;
-  }
-
-  .booking-title {
-    font-size: 24px;
-  }
-}
-/* ===============================
-   Schedule Cards UI (เพิ่มใหม่)
-=============================== */
-.mb-20 {
-  margin-bottom: 20px;
-}
-
-.schedule-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.loading-badge {
-  font-size: 12px;
-  color: #3b82f6;
-  font-weight: 600;
-  animation: pulse 1.5s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-.schedule-cards-container {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 12px;
-}
-
-.schedule-card {
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 14px;
-  text-align: left;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.schedule-card:hover:not(.disabled) {
-  border-color: #93c5fd;
-  background-color: #f0fdf4;
-}
-
-.schedule-card.selected {
-  border-color: #3b82f6;
-  background-color: #eff6ff;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
-}
-
-.schedule-card.disabled {
-  background-color: #f8fafc;
-  border-color: #f1f5f9;
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.schedule-time {
-  font-size: 16px;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.schedule-seats {
-  font-size: 12px;
-  margin-top: 4px;
+  color: #c8102e;
   font-weight: 600;
 }
 
-.schedule-seats.available {
-  color: #16a34a; /* สีเขียว */
+.custom-dropdown-menu::-webkit-scrollbar {
+  width: 6px;
 }
-
-.schedule-seats.full {
-  color: #dc2626; /* สีแดง */
+.custom-dropdown-menu::-webkit-scrollbar-track {
+  background: transparent;
 }
-
-.loading-text {
-  font-size: 14px;
-  color: #64748b;
-  grid-column: 1 / -1;
-  text-align: center;
-  padding: 20px 0;
+.custom-dropdown-menu::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 10px;
 }
