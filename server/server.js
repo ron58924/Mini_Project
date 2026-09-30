@@ -1087,98 +1087,124 @@ app.post('/api/bookings/create', async (req, res) => {
 });
 
 // ==========================================
-// API คำนวณที่นั่งว่าง (Availability - แก้ไขลอจิกลำดับป้ายที่ซ้ำกัน)
+// 1. API: ดึงรายชื่อสถานีทั้งหมด (สำหรับ Dropdown)
 // ==========================================
-app.get('/api/booking/schedules/:routeCode/availability', async (req, res) => {
-  const { routeCode } = req.params;
-  const { pickup_order, dropoff_order, travel_date } = req.query;
+app.get('/api/stations', async (req, res) => {
   let connection;
-
   try {
     connection = await getConnection();
+    const result = await connection.execute(
+      `SELECT stop_code, stop_name FROM stations ORDER BY stop_name`
+    );
+    const stations = result.rows.map(row => ({
+      stop_code: row[0],
+      stop_name: row[1]
+    }));
+    res.json(stations);
+  } catch (error) {
+    res.status(500).json({ message: "Cannot get stations", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
 
+// ==========================================
+// 2. API: ค้นหารอบรถแบบ Smart Search (เช็คเวลา + ที่นั่งว่าง)
+// ==========================================
+app.get('/api/booking/search', async (req, res) => {
+  const { pickup_code, dropoff_code, travel_date } = req.query;
+  let connection;
+  try {
+    connection = await getConnection();
     const query = `
       WITH OrderedLogs AS (
-          SELECT log_code, schedule_code, expected_timestamp,
+          SELECT log_code, schedule_code, stop_code, expected_timestamp,
                  ROW_NUMBER() OVER (PARTITION BY schedule_code ORDER BY expected_timestamp ASC) as stop_order
           FROM trip_logs
       ),
-      BookingOrders AS (
-          SELECT b.booking_code, b.passenger_count,
-                 p.schedule_code,
+      ValidSchedules AS (
+          SELECT p.schedule_code,
                  p.stop_order as pickup_order,
-                 d.stop_order as dropoff_order
+                 d.stop_order as dropoff_order,
+                 p.expected_timestamp as pickup_time,
+                 d.expected_timestamp as dropoff_time
+          FROM OrderedLogs p
+          JOIN OrderedLogs d ON p.schedule_code = d.schedule_code
+          WHERE p.stop_code = :pickup_code
+            AND d.stop_code = :dropoff_code
+            AND p.stop_order < d.stop_order
+            AND TRUNC(p.expected_timestamp) = TO_DATE(:travel_date, 'YYYY-MM-DD')
+            AND p.expected_timestamp > (SYSTIMESTAMP + INTERVAL '20' MINUTE)
+      ),
+      BookingOrders AS (
+          SELECT b.booking_code, b.passenger_count, p.schedule_code,
+                 p.stop_order as pickup_order, d.stop_order as dropoff_order
           FROM bookings b
           JOIN OrderedLogs p ON b.pickup_log_code = p.log_code
           JOIN OrderedLogs d ON b.dropoff_log_code = d.log_code
           WHERE b.status IN ('ACTIVE', 'COMPLETED')
             AND TRUNC(b.travel_date) = TO_DATE(:travel_date, 'YYYY-MM-DD')
       ),
-      SegmentBounds AS (
-          SELECT TO_NUMBER(:pickup_order) as p_order, TO_NUMBER(:dropoff_order) as d_order FROM DUAL
-      ),
       ScheduleUsage AS (
-          SELECT 
-              s.schedule_code,
-              s.start_time,
-              v.capacity,
-              NVL((
-                  SELECT MAX(passengers_on_board)
-                  FROM (
-                      SELECT segments.check_order, NVL(SUM(bo.passenger_count), 0) as passengers_on_board
-                      FROM (
-                          SELECT (SELECT p_order FROM SegmentBounds) + LEVEL - 1 AS check_order
-                          FROM DUAL
-                          CONNECT BY LEVEL <= (SELECT d_order - p_order FROM SegmentBounds)
-                      ) segments
-                      LEFT JOIN BookingOrders bo 
-                             ON bo.schedule_code = s.schedule_code
-                            AND bo.pickup_order <= segments.check_order
-                            AND bo.dropoff_order > segments.check_order
-                      GROUP BY segments.check_order
-                  )
-              ), 0) AS max_used_seats
-          FROM schedules s
+          SELECT vs.schedule_code, vs.pickup_order, vs.dropoff_order,
+                 TO_CHAR(vs.pickup_time, 'HH24:MI') as expected_pickup_time,
+                 TO_CHAR(vs.dropoff_time, 'HH24:MI') as expected_dropoff_time,
+                 s.route_code, r.route_name, v.capacity,
+                 NVL((
+                     SELECT MAX(passengers_on_board) FROM (
+                         SELECT segments.check_order, NVL(SUM(bo.passenger_count), 0) as passengers_on_board
+                         FROM (
+                             SELECT vs.pickup_order + LEVEL - 1 AS check_order
+                             FROM DUAL
+                             CONNECT BY LEVEL <= (vs.dropoff_order - vs.pickup_order)
+                         ) segments
+                         LEFT JOIN BookingOrders bo
+                                ON bo.schedule_code = vs.schedule_code
+                               AND bo.pickup_order <= segments.check_order
+                               AND bo.dropoff_order > segments.check_order
+                         GROUP BY segments.check_order
+                     )
+                 ), 0) AS max_used_seats
+          FROM ValidSchedules vs
+          JOIN schedules s ON vs.schedule_code = s.schedule_code
+          JOIN routes r ON s.route_code = r.route_code
           JOIN vehicles v ON s.vehicle_code = v.vehicle_code
-          -- [เพิ่มใหม่] เช็คเวลาที่รถจะถึงจุดขึ้นรถ ต้องมากกว่าเวลาปัจจุบัน 20 นาที --
-          JOIN OrderedLogs plog ON plog.schedule_code = s.schedule_code 
-               AND plog.stop_order = (SELECT p_order FROM SegmentBounds)
-          WHERE s.route_code = :routeCode
-            -- SYSTIMESTAMP + 20 นาที
-            AND plog.expected_timestamp > (SYSTIMESTAMP + INTERVAL '20' MINUTE) 
       )
-      SELECT 
-          schedule_code, start_time, capacity, max_used_seats,
-          (capacity - max_used_seats) AS available_seats
+      SELECT schedule_code, route_code, route_name,
+             pickup_order, dropoff_order,
+             expected_pickup_time, expected_dropoff_time,
+             capacity,
+             (capacity - max_used_seats) AS available_seats
       FROM ScheduleUsage
-      ORDER BY start_time ASC
+      ORDER BY expected_pickup_time ASC
     `;
 
     const result = await connection.execute(query, {
-      routeCode,
-      pickup_order,
-      dropoff_order,
-      travel_date: travel_date 
+      pickup_code, dropoff_code, travel_date
     });
 
     const schedules = result.rows.map(row => ({
       schedule_code: row[0],
-      start_time: row[1],
-      total_capacity: row[2],
-      used_seats: row[3],
-      available_seats: row[4]
+      route_code: row[1],
+      route_name: row[2],
+      pickup_order: row[3],
+      dropoff_order: row[4],
+      expected_pickup_time: row[5],
+      expected_dropoff_time: row[6],
+      total_capacity: row[7],
+      available_seats: row[8]
     }));
-
     res.json(schedules);
   } catch (error) {
-    console.error("Availability Error:", error);
-    res.status(500).json({ message: "Error calculating availability", error: error.message });
+    console.error("Search API Error:", error);
+    res.status(500).json({ message: "Search Error", error: error.message });
   } finally {
     if (connection) await connection.close();
   }
 });
+
 // ==========================================
-// [เพิ่มใหม่] ดึงประวัติการจองของผู้ใช้งาน
+// 3. API: ดึงประวัติการจองของผู้ใช้งาน
 // ==========================================
 app.get('/api/user/bookings/:userCode', async (req, res) => {
   let connection;
@@ -1211,7 +1237,7 @@ app.get('/api/user/bookings/:userCode', async (req, res) => {
       booking_code: row[0],
       travel_date: row[1],
       passenger_count: row[2],
-      status: row[3], // ACTIVE, COMPLETED, CANCELLED
+      status: row[3],
       qr_code: row[4],
       start_time: row[5],
       route_name: row[6],
@@ -1227,7 +1253,7 @@ app.get('/api/user/bookings/:userCode', async (req, res) => {
 });
 
 // ==========================================
-// [เพิ่มใหม่] ยกเลิกการจอง (โดยผู้ใช้งาน)
+// 4. API: ยกเลิกการจอง (โดยผู้ใช้งาน)
 // ==========================================
 app.put('/api/bookings/:bookingCode/cancel', async (req, res) => {
   let connection;
@@ -1235,7 +1261,6 @@ app.put('/api/bookings/:bookingCode/cancel', async (req, res) => {
     const { bookingCode } = req.params;
     connection = await getConnection();
     
-    // ตรวจสอบสถานะก่อนว่ายังเป็น ACTIVE อยู่หรือไม่
     const checkStatus = await connection.execute(
       `SELECT status FROM bookings WHERE booking_code = :bookingCode`,
       { bookingCode }
@@ -1248,8 +1273,6 @@ app.put('/api/bookings/:bookingCode/cancel', async (req, res) => {
       return res.status(400).json({ message: "ไม่สามารถยกเลิกรายการนี้ได้ เนื่องจากสถานะไม่ใช่ ACTIVE" });
     }
 
-    // อัปเดตสถานะเป็น CANCELLED
-    // (เมื่อเปลี่ยนสถานะแล้ว จำนวนที่นั่งว่างในรอบนั้นจะคืนกลับมาอัตโนมัติใน API Availability)
     await connection.execute(
       `UPDATE bookings SET status = 'CANCELLED' WHERE booking_code = :bookingCode`,
       { bookingCode },
