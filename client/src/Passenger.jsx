@@ -4,39 +4,26 @@ import Swal from "sweetalert2";
 import Navbar from "./Navbar";
 import "./Passenger.css";
 
-// ชุดคำแปลชื่อคณะ (อ้างอิงจากข้อมูลใน Database)
-const facultyTranslations = {
-  "Faculty of Engineering": "คณะวิศวกรรมศาสตร์",
-  "Faculty of Business Administration": "คณะบริหารธุรกิจ",
-  "Faculty of Veterinary Medicine": "คณะสัตวแพทยศาสตร์",
-  "Faculty of Information Science and Technology": "คณะวิทยาการคอมพิวเตอร์และเทคโนโลยีสารสนเทศ"
-};
-
 function Passenger() {
   const [passengers, setPassengers] = useState([]);
-  const [deptOptions, setDeptOptions] = useState([]); // State สำหรับเก็บตัวเลือกคณะ
-
-  const [searchTerm, setSearchTerm] = useState(""); // ค้นหาจากชื่อ/นามสกุล
-  const [filterDept, setFilterDept] = useState(""); // กรองตามคณะ
-  
+  const [deptOptions, setDeptOptions] = useState([]);
+  const [searchTerm, setSearchTerm] = useState(""); 
+  const [filterDept, setFilterDept] = useState(""); 
   const [formData, setFormData] = useState({
     user_code: "", first_name: "", last_name: "", email: "", 
     username: "", password: "", role_code: "R03", dept_code: ""
   });
-  
   const [isEditing, setIsEditing] = useState(false);
-  const [showModal, setShowModal] = useState(false); // ควบคุมการเปิดปิด Modal
+  const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
     fetchPassengers();
-    fetchFaculties(); // เรียกใช้งานดึงข้อมูลคณะตอนโหลดหน้าเว็บ
+    fetchFaculties(); 
   }, []);
 
   const fetchPassengers = async () => {
     try {
       const response = await axios.get("http://localhost:5000/api/users");
-      
-      // กรองเอาเฉพาะผู้โดยสาร (Role: R03) มาแสดง
       const passengersOnly = response.data.filter((user) => user.role_code === 'R03');
       setPassengers(passengersOnly);
     } catch (error) {
@@ -47,10 +34,9 @@ function Passenger() {
   const fetchFaculties = async () => {
     try {
       const response = await axios.get("http://localhost:5000/api/departments");
-      
-      // กรองเอาเฉพาะแผนกที่มีคำว่า "Faculty" (ตัดพวกแผนกแอดมินออก)
+      // กรองเอาเฉพาะข้อมูลที่มีคำว่า "คณะ" 
       const facultiesOnly = response.data.filter((dept) => 
-        dept.dept_name.includes("Faculty")
+        dept.dept_name.includes("คณะ")
       );
       setDeptOptions(facultiesOnly);
     } catch (error) {
@@ -89,7 +75,7 @@ function Passenger() {
         await axios.post("http://localhost:5000/api/users", formData);
         Swal.fire({ icon: "success", title: "เพิ่มผู้โดยสารสำเร็จ", timer: 1500, showConfirmButton: false });
       }
-      closeModal(); // ปิด Modal หลังจากสำเร็จ
+      closeModal(); 
       fetchPassengers();
     } catch (error) {
       Swal.fire({ icon: "error", title: "เกิดข้อผิดพลาด", text: error.response?.data?.message || "ไม่สามารถบันทึกข้อมูลได้" });
@@ -117,7 +103,6 @@ function Passenger() {
     }
   };
 
-  // กรองรายชื่อผู้โดยสารตามคำค้นหา (ชื่อ/นามสกุล) และคณะที่เลือก
   const filteredPassengers = passengers.filter((user) => {
     const keyword = searchTerm.trim().toLowerCase();
     const matchSearch =
@@ -135,46 +120,25 @@ function Passenger() {
     <>
       <Navbar />
       <div className="passenger-page container mt-4">
-        
-        {/* Header และปุ่มเปิด Modal */}
         <div className="d-flex justify-content-between align-items-center mb-4">
           <h2>จัดการผู้โดยสาร (Passengers)</h2>
           <button className="btn btn-primary" onClick={handleAddClick}>
             + เพิ่มผู้โดยสาร
           </button>
         </div>
-
-        {/* ช่องค้นหาชื่อ/นามสกุล + ตัวกรองคณะ */}
         <div className="row g-2 mb-3">
           <div className="col-md-6">
-            <input
-              type="text"
-              className="form-control"
-              placeholder="ค้นหาชื่อ, นามสกุล หรือ Username..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+            <input type="text" className="form-control" placeholder="ค้นหาชื่อ, นามสกุล หรือ Username..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
           <div className="col-md-6">
-            <select
-              className="form-select"
-              value={filterDept}
-              onChange={(e) => setFilterDept(e.target.value)}
-            >
+            <select className="form-select" value={filterDept} onChange={(e) => setFilterDept(e.target.value)}>
               <option value="">-- ทุกคณะ --</option>
-              {deptOptions.map((dept) => {
-                const thaiName = facultyTranslations[dept.dept_name] || dept.dept_name;
-                return (
-                  <option key={dept.dept_code} value={dept.dept_code}>
-                    {thaiName}
-                  </option>
-                );
-              })}
+              {deptOptions.map((dept) => (
+                <option key={dept.dept_code} value={dept.dept_code}>{dept.dept_name}</option>
+              ))}
             </select>
           </div>
         </div>
-
-        {/* ตารางแสดงข้อมูลผู้โดยสาร */}
         <div className="table-responsive">
           <table className="table table-bordered table-hover align-middle">
             <thead className="table-dark text-center">
@@ -189,22 +153,19 @@ function Passenger() {
             </thead>
             <tbody>
               {filteredPassengers.length > 0 ? (
-                filteredPassengers.map((user) => {
-                  const displayDeptName = facultyTranslations[user.dept_name] || user.dept_name || "-";
-                  return (
-                    <tr key={user.user_code}>
-                      <td className="text-center">{user.user_code}</td>
-                      <td>{user.first_name} {user.last_name}</td>
-                      <td>{user.email}</td>
-                      <td>{user.username}</td>
-                      <td>{displayDeptName}</td>
-                      <td className="text-center">
-                        <button className="btn btn-warning btn-sm me-2" onClick={() => handleEditClick(user)}>แก้ไข</button>
-                        <button className="btn btn-danger btn-sm" onClick={() => handleDelete(user.user_code)}>ลบ</button>
-                      </td>
-                    </tr>
-                  );
-                })
+                filteredPassengers.map((user) => (
+                  <tr key={user.user_code}>
+                    <td className="text-center">{user.user_code}</td>
+                    <td>{user.first_name} {user.last_name}</td>
+                    <td>{user.email}</td>
+                    <td>{user.username}</td>
+                    <td>{user.dept_name || "-"}</td>
+                    <td className="text-center">
+                      <button className="btn btn-warning btn-sm me-2" onClick={() => handleEditClick(user)}>แก้ไข</button>
+                      <button className="btn btn-danger btn-sm" onClick={() => handleDelete(user.user_code)}>ลบ</button>
+                    </td>
+                  </tr>
+                ))
               ) : (
                 <tr>
                   <td colSpan="6" className="text-center py-4 text-muted">ไม่พบข้อมูลผู้โดยสารที่ตรงกับเงื่อนไข</td>
@@ -213,21 +174,14 @@ function Passenger() {
             </tbody>
           </table>
         </div>
-
-        {/* =====================================================
-            Popup Modal สำหรับ เพิ่ม/แก้ไข
-        ===================================================== */}
         {showModal && (
           <div className="modal fade show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
             <div className="modal-dialog modal-lg modal-dialog-centered">
               <div className="modal-content shadow-lg border-0 rounded-4">
                 <div className="modal-header bg-light border-bottom-0">
-                  <h5 className="modal-title fw-bold text-dark">
-                    {isEditing ? "แก้ไขข้อมูลผู้โดยสาร" : "เพิ่มผู้โดยสารใหม่"}
-                  </h5>
+                  <h5 className="modal-title fw-bold text-dark">{isEditing ? "แก้ไขข้อมูลผู้โดยสาร" : "เพิ่มผู้โดยสารใหม่"}</h5>
                   <button type="button" className="btn-close" onClick={closeModal}></button>
                 </div>
-                
                 <form onSubmit={handleSubmit}>
                   <div className="modal-body p-4">
                     <div className="row g-3">
@@ -255,30 +209,22 @@ function Passenger() {
                         <label className="form-label fw-bold">คณะ (Faculty)</label>
                         <select name="dept_code" className="form-select" value={formData.dept_code} onChange={handleInputChange} required>
                           <option value="">-- เลือกคณะ --</option>
-                          {deptOptions.map((dept) => {
-                            const thaiName = facultyTranslations[dept.dept_name] || dept.dept_name;
-                            return (
-                              <option key={dept.dept_code} value={dept.dept_code}>
-                                {thaiName}
-                              </option>
-                            );
-                          })}
+                          {deptOptions.map((dept) => (
+                            <option key={dept.dept_code} value={dept.dept_code}>{dept.dept_name}</option>
+                          ))}
                         </select>
                       </div>
                     </div>
                   </div>
                   <div className="modal-footer border-top-0 bg-light rounded-bottom-4">
                     <button type="button" className="btn btn-secondary px-4" onClick={closeModal}>ยกเลิก</button>
-                    <button type="submit" className="btn btn-primary px-4">
-                      {isEditing ? "บันทึกการแก้ไข" : "ยืนยันการเพิ่ม"}
-                    </button>
+                    <button type="submit" className="btn btn-primary px-4">{isEditing ? "บันทึกการแก้ไข" : "ยืนยันการเพิ่ม"}</button>
                   </div>
                 </form>
               </div>
             </div>
           </div>
         )}
-
       </div>
     </>
   );

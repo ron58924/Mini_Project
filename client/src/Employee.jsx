@@ -3,24 +3,17 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import Navbar from "./Navbar";
 
-// รหัสแผนกที่ต้องการให้แสดงใน "ตัวกรองค้นหาแผนก" เท่านั้น (D05-D08)
-const SEARCH_DEPT_CODES = ["D05", "D06", "D07", "D08"];
-
 function Employee() {
   const [users, setUsers] = useState([]);
-
   const [roleOptions, setRoleOptions] = useState([]);
   const [deptOptions, setDeptOptions] = useState([]);       // ใช้ในฟอร์ม เพิ่ม/แก้ไข
   const [allDeptOptions, setAllDeptOptions] = useState([]); // รายชื่อแผนกฉบับเต็ม
-
   const [searchTerm, setSearchTerm] = useState(""); 
   const [filterDept, setFilterDept] = useState(""); 
-
   const [formData, setFormData] = useState({
     user_code: "", first_name: "", last_name: "", email: "", 
     username: "", password: "", role_code: "", dept_code: ""
   });
-  
   const [isEditing, setIsEditing] = useState(false);
   const [showModal, setShowModal] = useState(false);
 
@@ -32,9 +25,10 @@ function Employee() {
   const fetchUsers = async () => {
     try {
       const response = await axios.get("http://localhost:5000/api/users");
+      // กรองเอาเฉพาะพนักงาน (Role ไม่ใช่ ผู้โดยสาร)
       const employeesOnly = response.data.filter((user) => {
         const roleName = user.role_name ? user.role_name.toLowerCase() : "";
-        return !roleName.includes("passenger") && !roleName.includes("passanger");
+        return !roleName.includes("passenger") && !roleName.includes("ผู้โดยสาร");
       });
       setUsers(employeesOnly); 
     } catch (error) {
@@ -50,17 +44,16 @@ function Employee() {
       ]);
       
       const staffRoles = roleRes.data.filter(
-        (role) => !role.role_name.toLowerCase().includes("passenger")
+        (role) => !role.role_name.toLowerCase().includes("passenger") && !role.role_name.includes("ผู้โดยสาร")
       );
       setRoleOptions(staffRoles);
 
+      // กรองเอาเฉพาะแผนกพนักงาน (ไม่มีคำว่า "คณะ")
       const staffDepartments = deptRes.data.filter(
-        (dept) => !dept.dept_name.includes("Faculty")
+        (dept) => !dept.dept_name.includes("คณะ")
       );
       setDeptOptions(staffDepartments);
-
       setAllDeptOptions(deptRes.data);
-
     } catch (error) {
       console.error("Error fetching options:", error);
     }
@@ -125,9 +118,8 @@ function Employee() {
     }
   };
 
-  const searchDeptOptions = allDeptOptions.filter((dept) =>
-    SEARCH_DEPT_CODES.includes(dept.dept_code)
-  );
+  // ตัวเลือกสำหรับช่องค้นหา (กรองเอาเฉพาะแผนก ไม่มีคำว่า "คณะ")
+  const searchDeptOptions = allDeptOptions.filter((dept) => !dept.dept_name.includes("คณะ"));
 
   const filteredUsers = users.filter((user) => {
     const keyword = searchTerm.trim().toLowerCase();
@@ -144,147 +136,41 @@ function Employee() {
 
   return (
     <div style={{ fontFamily: "'Prompt', sans-serif", backgroundColor: "#fafafa", minHeight: "100vh" }}>
-      {/* สไตล์ CSS สำหรับปรับแต่งให้เหมือนหน้า Passenger */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap');
-        
-        * {
-          font-family: 'Prompt', sans-serif !important;
-        }
-
-        /* ตกแต่งช่อง Input / Select */
-        .search-box-custom {
-          background-color: #f4f6f8 !important;
-          border: 1px solid #e5e7eb !important;
-          border-radius: 10px !important;
-          font-size: 14px;
-          color: #374151;
-        }
-
-        .search-box-custom:focus {
-          border-color: #be123c !important;
-          box-shadow: 0 0 0 3px rgba(190, 18, 60, 0.15) !important;
-        }
-
-        /* ตารางและหัวตาราง (แถบชื่อ/รหัส) */
-        .table-custom-wrapper {
-          border-radius: 12px;
-          overflow: hidden;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-          border: 1px solid #e5e7eb;
-        }
-
-        /* กำหนดสีแดงเลือดหมูให้ช่อง th ทุกช่องในหัวตาราง */
-        .table-custom-header th {
-          background-color: #3d080b !important;
-          color: #ffffff !important;
-          font-size: 14px !important;
-          font-weight: 600 !important;
-          letter-spacing: 0.5px;
-          border-bottom: none !important;
-        }
-
-        .table-custom tbody tr:nth-of-type(even) {
-          background-color: #f9fafb;
-        }
-
-        .table-custom tbody tr:hover {
-          background-color: #f3f4f6;
-        }
-
-        /* ปุ่มเพิ่มผู้ใช้ */
-        .btn-add-passenger {
-          background-color: #be123c !important;
-          color: #ffffff !important;
-          border: none !important;
-          border-radius: 30px !important;
-          padding: 8px 24px !important;
-          font-weight: 600 !important;
-          font-size: 15px !important;
-          box-shadow: 0 4px 12px rgba(190, 18, 60, 0.3) !important;
-          transition: all 0.2s ease-in-out;
-        }
-
-        .btn-add-passenger:hover {
-          background-color: #9f1239 !important;
-          transform: translateY(-1px);
-        }
-
-        /* ปุ่มแก้ไข และ ปุ่มลบ */
-        .btn-edit-action {
-          background-color: #f59e0b !important;
-          color: #000000 !important;
-          border: none !important;
-          border-radius: 6px !important;
-          font-weight: 600 !important;
-          font-size: 13px !important;
-          padding: 4px 14px !important;
-        }
-
-        .btn-edit-action:hover {
-          background-color: #d97706 !important;
-        }
-
-        .btn-delete-action {
-          background-color: #dc2626 !important;
-          color: #ffffff !important;
-          border: none !important;
-          border-radius: 6px !important;
-          font-weight: 600 !important;
-          font-size: 13px !important;
-          padding: 4px 14px !important;
-        }
-
-        .btn-delete-action:hover {
-          background-color: #b91c1c !important;
-        }
+        * { font-family: 'Prompt', sans-serif !important; }
+        .search-box-custom { background-color: #f4f6f8 !important; border: 1px solid #e5e7eb !important; border-radius: 10px !important; font-size: 14px; color: #374151; }
+        .search-box-custom:focus { border-color: #be123c !important; box-shadow: 0 0 0 3px rgba(190, 18, 60, 0.15) !important; }
+        .table-custom-wrapper { border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); border: 1px solid #e5e7eb; }
+        .table-custom-header th { background-color: #3d080b !important; color: #ffffff !important; font-size: 14px !important; font-weight: 600 !important; letter-spacing: 0.5px; border-bottom: none !important; }
+        .table-custom tbody tr:nth-of-type(even) { background-color: #f9fafb; }
+        .table-custom tbody tr:hover { background-color: #f3f4f6; }
+        .btn-add-passenger { background-color: #be123c !important; color: #ffffff !important; border: none !important; border-radius: 30px !important; padding: 8px 24px !important; font-weight: 600 !important; font-size: 15px !important; box-shadow: 0 4px 12px rgba(190, 18, 60, 0.3) !important; transition: all 0.2s ease-in-out; }
+        .btn-add-passenger:hover { background-color: #9f1239 !important; transform: translateY(-1px); }
+        .btn-edit-action { background-color: #f59e0b !important; color: #000000 !important; border: none !important; border-radius: 6px !important; font-weight: 600 !important; font-size: 13px !important; padding: 4px 14px !important; }
+        .btn-edit-action:hover { background-color: #d97706 !important; }
+        .btn-delete-action { background-color: #dc2626 !important; color: #ffffff !important; border: none !important; border-radius: 6px !important; font-weight: 600 !important; font-size: 13px !important; padding: 4px 14px !important; }
+        .btn-delete-action:hover { background-color: #b91c1c !important; }
       `}</style>
-
       <Navbar />
-      
       <div className="container py-4">
-        
-        {/* Header และปุ่มเพิ่มพนักงาน */}
         <div className="d-flex justify-content-between align-items-center mb-4">
-          <h2 className="fw-bold text-dark mb-0" style={{ fontSize: "28px" }}>
-            จัดการพนักงาน (Empolyee)
-          </h2>
-          <button 
-            className="btn btn-add-passenger"
-            onClick={handleAddClick}
-          >
-            + เพิ่มพนักงาน
-          </button>
+          <h2 className="fw-bold text-dark mb-0" style={{ fontSize: "28px" }}>จัดการพนักงาน (Empolyee)</h2>
+          <button className="btn btn-add-passenger" onClick={handleAddClick}>+ เพิ่มพนักงาน</button>
         </div>
-
-        {/* ช่องค้นหา และ ตัวกรองแผนก */}
         <div className="row g-3 mb-4">
           <div className="col-md-6">
-            <input
-              type="text"
-              className="form-control search-box-custom py-2 px-3"
-              placeholder="ค้นหาชื่อ, นามสกุล หรือ Username..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+            <input type="text" className="form-control search-box-custom py-2 px-3" placeholder="ค้นหาชื่อ, นามสกุล หรือ Username..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
           <div className="col-md-6">
-            <select
-              className="form-select search-box-custom py-2 px-3"
-              value={filterDept}
-              onChange={(e) => setFilterDept(e.target.value)}
-            >
+            <select className="form-select search-box-custom py-2 px-3" value={filterDept} onChange={(e) => setFilterDept(e.target.value)}>
               <option value="">-- ทุกแผนก --</option>
               {searchDeptOptions.map((dept) => (
-                <option key={dept.dept_code} value={dept.dept_code}>
-                  {dept.dept_name}
-                </option>
+                <option key={dept.dept_code} value={dept.dept_code}>{dept.dept_name}</option>
               ))}
             </select>
           </div>
         </div>
-
-        {/* ตารางข้อมูล */}
         <div className="table-responsive table-custom-wrapper">
           <table className="table table-custom align-middle mb-0">
             <thead>
@@ -309,18 +195,8 @@ function Employee() {
                     <td className="text-center">{user.role_name}</td>
                     <td>{user.dept_name || "-"}</td>
                     <td className="text-center">
-                      <button 
-                        className="btn btn-edit-action me-2"
-                        onClick={() => handleEditClick(user)}
-                      >
-                        แก้ไข
-                      </button>
-                      <button 
-                        className="btn btn-delete-action"
-                        onClick={() => handleDelete(user.user_code)}
-                      >
-                        ลบ
-                      </button>
+                      <button className="btn btn-edit-action me-2" onClick={() => handleEditClick(user)}>แก้ไข</button>
+                      <button className="btn btn-delete-action" onClick={() => handleDelete(user.user_code)}>ลบ</button>
                     </td>
                   </tr>
                 ))
@@ -332,19 +208,14 @@ function Employee() {
             </tbody>
           </table>
         </div>
-
-        {/* Modal เพิ่ม/แก้ไข */}
         {showModal && (
           <div className="modal fade show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
             <div className="modal-dialog modal-lg modal-dialog-centered">
               <div className="modal-content shadow-lg border-0 rounded-4">
                 <div className="modal-header bg-light border-bottom-0">
-                  <h5 className="modal-title fw-bold text-dark">
-                    {isEditing ? "แก้ไขข้อมูลพนักงาน" : "เพิ่มพนักงานใหม่"}
-                  </h5>
+                  <h5 className="modal-title fw-bold text-dark">{isEditing ? "แก้ไขข้อมูลพนักงาน" : "เพิ่มพนักงานใหม่"}</h5>
                   <button type="button" className="btn-close" onClick={closeModal}></button>
                 </div>
-                
                 <form onSubmit={handleSubmit}>
                   <div className="modal-body p-4">
                     <div className="row g-3">
@@ -373,9 +244,7 @@ function Employee() {
                         <select name="role_code" className="form-select" value={formData.role_code} onChange={handleInputChange} required>
                           <option value="">-- เลือกสิทธิ์ --</option>
                           {roleOptions.map((role) => (
-                            <option key={role.role_code} value={role.role_code}>
-                              {role.role_name}
-                            </option>
+                            <option key={role.role_code} value={role.role_code}>{role.role_name}</option>
                           ))}
                         </select>
                       </div>
@@ -384,9 +253,7 @@ function Employee() {
                         <select name="dept_code" className="form-select" value={formData.dept_code} onChange={handleInputChange} required>
                           <option value="">-- เลือกแผนก --</option>
                           {deptOptions.map((dept) => (
-                            <option key={dept.dept_code} value={dept.dept_code}>
-                              {dept.dept_name}
-                            </option>
+                            <option key={dept.dept_code} value={dept.dept_code}>{dept.dept_name}</option>
                           ))}
                         </select>
                       </div>
@@ -403,7 +270,6 @@ function Employee() {
             </div>
           </div>
         )}
-
       </div>
     </div>
   );
