@@ -46,7 +46,6 @@ function Register() {
   useEffect(() => {
     const fetchDepartments = async () => {
       try {
-        // ดึงจาก /api/departments ทั้งหมด แล้วนำมากรองหาคำว่า "คณะ" เอง
         const response = await axios.get("http://localhost:5000/api/departments");
         const facultiesOnly = response.data.filter((dept) => 
           dept.dept_name.includes("คณะ")
@@ -147,18 +146,33 @@ function Register() {
             <p>กรอกข้อมูลด้านล่างเพื่อลงทะเบียนเข้าใช้งานระบบ</p>
           </header>
           <form className="register-form" onSubmit={handleRegister} noValidate>
-            <div className="field-row">
-              <div className="field">
-                <label>ชื่อ (First Name) <span>*</span></label>
-                <input type="text" placeholder="เช่น Somchai" value={firstName} onChange={(e) => { setFirstName(e.target.value); if (errors.firstName) setErrors((prev) => ({ ...prev, firstName: null })); }} />
-                {errors.firstName && <p className="field-error">{errors.firstName}</p>}
-              </div>
-              <div className="field">
-                <label>นามสกุล (Last Name) <span>*</span></label>
-                <input type="text" placeholder="เช่น Jaidee" value={lastName} onChange={(e) => { setLastName(e.target.value); if (errors.lastName) setErrors((prev) => ({ ...prev, lastName: null })); }} />
-                {errors.lastName && <p className="field-error">{errors.lastName}</p>}
-              </div>
+            {/* ชื่อ (First Name) - บรรทัดแรก */}
+            <div className="field field-full">
+              <label>ชื่อ (First Name) <span>*</span></label>
+              <input type="text" placeholder="เช่น Somchai" value={firstName} onChange={(e) => { setFirstName(e.target.value); if (errors.firstName) setErrors((prev) => ({ ...prev, firstName: null })); }} />
+              {errors.firstName && <p className="field-error">{errors.firstName}</p>}
             </div>
+
+            {/* นามสกุล (Last Name) - บรรทัดที่สอง */}
+            <div className="field field-full">
+              <label>นามสกุล (Last Name) <span>*</span></label>
+              <input type="text" placeholder="เช่น Jaidee" value={lastName} onChange={(e) => { setLastName(e.target.value); if (errors.lastName) setErrors((prev) => ({ ...prev, lastName: null })); }} />
+              {errors.lastName && <p className="field-error">{errors.lastName}</p>}
+            </div>
+
+            {/* คณะ (Faculty) - บรรทัดที่สาม */}
+            <div className="field field-full">
+              <label>คณะ (Faculty) <span>*</span></label>
+              <select className="form-select" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc", outline: "none", fontSize: "14px" }} value={deptCode} onChange={(e) => { setDeptCode(e.target.value); if (errors.deptCode) setErrors((prev) => ({ ...prev, deptCode: null })); }}>
+                <option value="">-- เลือกคณะของคุณ --</option>
+                {deptOptions.map((dept) => (
+                  <option key={dept.dept_code} value={dept.dept_code}>{dept.dept_name}</option>
+                ))}
+              </select>
+              {errors.deptCode && <p className="field-error">{errors.deptCode}</p>}
+            </div>
+
+            {/* อีเมล และ เบอร์โทรศัพท์ - บรรทัดที่สี่ */}
             <div className="field-row">
               <div className="field">
                 <label>อีเมล <span>*</span></label>
@@ -171,16 +185,8 @@ function Register() {
                 {errors.phone && <p className="field-error">{errors.phone}</p>}
               </div>
             </div>
-            <div className="field field-full">
-              <label>คณะ (Faculty) <span>*</span></label>
-              <select className="form-select" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc", outline: "none", fontSize: "14px" }} value={deptCode} onChange={(e) => { setDeptCode(e.target.value); if (errors.deptCode) setErrors((prev) => ({ ...prev, deptCode: null })); }}>
-                <option value="">-- เลือกคณะของคุณ --</option>
-                {deptOptions.map((dept) => (
-                  <option key={dept.dept_code} value={dept.dept_code}>{dept.dept_name}</option>
-                ))}
-              </select>
-              {errors.deptCode && <p className="field-error">{errors.deptCode}</p>}
-            </div>
+
+            {/* รหัสผ่าน และ ยืนยันรหัสผ่าน - บรรทัดที่ห้า */}
             <div className="field-row">
               <div className="field">
                 <label>รหัสผ่าน <span>*</span></label>
@@ -199,6 +205,7 @@ function Register() {
                 {errors.confirmPassword && <p className="field-error">{errors.confirmPassword}</p>}
               </div>
             </div>
+
             <div className="terms-container">
               <label className="agreement">
                 <input type="checkbox" checked={acceptTerms} onChange={(e) => { setAcceptTerms(e.target.checked); if (errors.acceptTerms) setErrors((prev) => ({ ...prev, acceptTerms: null })); }} />
@@ -207,6 +214,7 @@ function Register() {
               </label>
               {errors.acceptTerms && <p className="field-error">{errors.acceptTerms}</p>}
             </div>
+
             <button type="submit" className="register-button" disabled={submitting}>
               <span>{submitting ? "กำลังสมัครสมาชิก..." : "ยืนยันสมัครสมาชิก"}</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
