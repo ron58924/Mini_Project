@@ -794,9 +794,16 @@ app.get("/api/driver/schedules", async (req, res) => {
   try {
     connection = await getConnection();
     const query = `
-      SELECT s.schedule_code, s.start_time, r.route_name
+      SELECT s.schedule_code, s.start_time, r.route_name, v.capacity,
+             (SELECT NVL(SUM(b.passenger_count), 0)
+              FROM bookings b
+              JOIN trip_logs pickup_log ON b.pickup_log_code = pickup_log.log_code
+              WHERE pickup_log.schedule_code = s.schedule_code
+                AND TRUNC(b.travel_date) = TRUNC(SYSDATE)
+                AND b.status = 'COMPLETED') AS boarded_count
       FROM schedules s
       JOIN routes r ON s.route_code = r.route_code
+      JOIN vehicles v ON s.vehicle_code = v.vehicle_code
       WHERE s.driver_code = :driver_code
       ORDER BY s.start_time ASC
     `;
@@ -804,7 +811,9 @@ app.get("/api/driver/schedules", async (req, res) => {
     const schedules = result.rows.map(row => ({
       schedule_code: row[0],
       start_time: row[1],
-      route_name: row[2]
+      route_name: row[2],
+      capacity: row[3],
+      boarded_count: row[4]
     }));
     res.json(schedules);
   } catch (error) {
@@ -869,6 +878,61 @@ app.put("/api/bookings/:booking_code/status", async (req, res) => {
     res.json({ message: "Status updated successfully" });
   } catch (error) {
     res.status(500).json({ message: "Error updating status", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
+app.post("/api/driver/check-in", async (req, res) => {
+  const { qr_code, schedule_code } = req.body;
+  if (!qr_code || !schedule_code) {
+    return res.status(400).json({ message: "กรุณาระบุ QR Code และรอบรถ" });
+  }
+
+  let connection;
+  try {
+    connection = await getConnection();
+    const result = await connection.execute(
+      `SELECT b.booking_code, u.first_name || ' ' || u.last_name, b.status, tp.schedule_code
+       FROM bookings b
+       JOIN users u ON b.user_code = u.user_code
+       JOIN trip_logs tp ON b.pickup_log_code = tp.log_code
+       WHERE b.qr_code = :qr_code
+         AND TRUNC(b.travel_date) = TRUNC(SYSDATE)`,
+      { qr_code }
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "ไม่พบตั๋ว QR นี้สำหรับการเดินทางวันนี้" });
+    }
+
+    const [bookingCode, passengerName, status, bookingSchedule] = result.rows[0];
+    if (bookingSchedule !== schedule_code) {
+      return res.status(409).json({ message: "ตั๋วนี้เป็นของรอบรถอื่น" });
+    }
+    if (status !== "ACTIVE") {
+      return res.status(409).json({ message: "ตั๋วนี้ถูกใช้แล้วหรือถูกยกเลิก" });
+    }
+
+    const updateResult = await connection.execute(
+      `UPDATE bookings
+       SET status = 'COMPLETED'
+       WHERE booking_code = :booking_code
+         AND qr_code = :qr_code
+         AND status = 'ACTIVE'
+         AND TRUNC(travel_date) = TRUNC(SYSDATE)`,
+      { booking_code: bookingCode, qr_code },
+      { autoCommit: true }
+    );
+
+    if (updateResult.rowsAffected !== 1) {
+      return res.status(409).json({ message: "ตั๋วนี้ถูกเช็คอินไปแล้ว" });
+    }
+
+    res.json({ booking_code: bookingCode, passenger_name: passengerName, status: "COMPLETED" });
+  } catch (error) {
+    console.error("Driver check-in error:", error);
+    res.status(500).json({ message: "ไม่สามารถบันทึกการเช็คอินได้", error: error.message });
   } finally {
     if (connection) await connection.close();
   }

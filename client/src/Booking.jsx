@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Navbar from './Navbar'; 
 import './Booking.css'; 
 import { useAuth } from './context/AuthContext'; 
+import { QRCodeSVG } from 'qrcode.react';
 
 const Booking = () => {
   const { user } = useAuth();
@@ -19,6 +20,7 @@ const Booking = () => {
 
   const [cart, setCart] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [confirmedTickets, setConfirmedTickets] = useState([]);
 
   useEffect(() => {
     fetch('http://localhost:5000/api/booking/routes')
@@ -122,6 +124,7 @@ const Booking = () => {
     setIsSubmitting(true);
     let successCount = 0;
     let failMessages = [];
+    const createdTickets = [];
 
     try {
       for (const item of cart) {
@@ -142,11 +145,13 @@ const Booking = () => {
         const result = await response.json();
         if (response.ok) {
           successCount++;
+          createdTickets.push({ ...item, ...result });
         } else {
           failMessages.push(`รอบ ${item.schedule_time}: ${result.message}`);
         }
       }
 
+      setConfirmedTickets(createdTickets);
       if (successCount === cart.length) {
         alert(`จองสำเร็จทั้งหมด ${successCount} รายการ!`);
         setCart([]);
@@ -358,6 +363,24 @@ const Booking = () => {
                 {isSubmitting ? 'กำลังบันทึกการจอง...' : `ยืนยันการจองทั้งหมด (${cart.length} รายการ)`}
               </button>
             </div>
+          )}
+
+          {confirmedTickets.length > 0 && (
+            <section className="booking-confirmed-tickets" aria-live="polite">
+              <h3>ตั๋วที่จองสำเร็จ</h3>
+              <div className="booking-ticket-list">
+                {confirmedTickets.map((ticket) => (
+                  <article className="booking-ticket" key={ticket.booking_code}>
+                    <div>
+                      <strong>{ticket.route_name} · {ticket.schedule_time}</strong>
+                      <span>รหัสจอง {ticket.booking_code}</span>
+                      <span>ขึ้น {ticket.pickup_name} · ลง {ticket.dropoff_name}</span>
+                    </div>
+                    <QRCodeSVG value={ticket.qr_code} size={128} level="M" title={`QR ตั๋ว ${ticket.booking_code}`} />
+                  </article>
+                ))}
+              </div>
+            </section>
           )}
 
         </div>
