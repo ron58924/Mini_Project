@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import axios from "axios";
 import {
   Chart as ChartJS,
@@ -12,7 +12,7 @@ import {
 } from "chart.js";
 import { Bar, Pie } from "react-chartjs-2";
 import "bootstrap/dist/css/bootstrap.min.css";
-import Navbar from "./Navbar"; // ปรับ path ให้ตรงกับโปรเจกต์คุณ
+import Navbar from "./navbar"; // แก้เป็น navbar (n ตัวเล็ก) ตามชื่อไฟล์จริง
 
 // ลงทะเบียน Chart.js
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Title, Tooltip, Legend);
@@ -23,7 +23,7 @@ function UserBehaviorReport() {
   const [reportData, setReportData] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // ฟังก์ชันแปลงวันที่เป็นภาษาไทย (เช่น 12 เมษายน 2568)
+  // ฟังก์ชันแปลงวันที่เป็นภาษาไทย
   const formatThaiDate = (dateString) => {
     if (!dateString) return "";
     const months = [
@@ -34,10 +34,15 @@ function UserBehaviorReport() {
     return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear() + 543}`;
   };
 
-  const fetchReport = async () => {
+  // ฟังก์ชันกดปุ่มค้นหา manual
+  const handleSearch = () => {
+    fetchReportData();
+  };
+
+  // ฟังก์ชันสำหรับดึงข้อมูล
+  const fetchReportData = async () => {
     setLoading(true);
     try {
-      // ดึงข้อมูลจริงจาก Database ตามช่วงวันที่ที่เลือก
       const response = await axios.get("http://localhost:5000/api/reports/user-behavior", {
         params: { startDate, endDate }
       });
@@ -49,9 +54,10 @@ function UserBehaviorReport() {
     }
   };
 
+  // ดึงข้อมูลเมื่อเปิดหน้าครั้งแรก (ย้ายฟังก์ชันมาไว้ข้างในเพื่อแก้ปัญหา ESLint)
   useEffect(() => {
-    fetchReport(); // โหลดข้อมูลตอนเปิดหน้าครั้งแรก
-    // eslint-disable-next-line
+    fetchReportData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // คำนวณผลรวมแถวล่างสุด
@@ -66,44 +72,40 @@ function UserBehaviorReport() {
     { total: 0, boarded: 0, canceled: 0, no_show: 0 }
   );
 
-  // ==========================================
   // ตั้งค่ากราฟแท่ง (Bar Chart)
-  // ==========================================
   const barChartData = {
     labels: reportData.map((d) => d.user_name),
     datasets: [
       {
         label: "การจองทั้งหมด",
         data: reportData.map((d) => d.total),
-        backgroundColor: "#3b82f6", // สีฟ้า
+        backgroundColor: "#3b82f6",
       },
       {
         label: "ขึ้นรถจริง",
         data: reportData.map((d) => d.boarded),
-        backgroundColor: "#f97316", // สีส้ม
+        backgroundColor: "#f97316",
       },
       {
         label: "ยกเลิก",
         data: reportData.map((d) => d.canceled),
-        backgroundColor: "#9ca3af", // สีเทา
+        backgroundColor: "#9ca3af",
       },
       {
         label: "No Show",
         data: reportData.map((d) => d.no_show),
-        backgroundColor: "#eab308", // สีเหลือง
+        backgroundColor: "#eab308",
       },
     ],
   };
 
-  // ==========================================
-  // ตั้งค่ากราฟวงกลม (Pie Chart) - สัดส่วนรวม
-  // ==========================================
+  // ตั้งค่ากราฟวงกลม (Pie Chart)
   const pieChartData = {
     labels: ["ขึ้นรถจริง", "ยกเลิก", "No Show"],
     datasets: [
       {
         data: [summary.boarded, summary.canceled, summary.no_show],
-        backgroundColor: ["#3b82f6", "#f97316", "#9ca3af"],
+        backgroundColor: ["#f97316", "#9ca3af", "#eab308"],
       },
     ],
   };
@@ -125,7 +127,7 @@ function UserBehaviorReport() {
               <label className="form-label fw-bold">ถึงวันที่</label>
               <input type="date" className="form-control" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
             </div>
-            <button className="btn btn-primary px-4" onClick={fetchReport} disabled={loading}>
+            <button className="btn btn-primary px-4" onClick={handleSearch} disabled={loading}>
               {loading ? "กำลังโหลด..." : "ค้นหา"}
             </button>
           </div>
@@ -137,7 +139,7 @@ function UserBehaviorReport() {
             <div className="card shadow-sm border-0 mb-5">
               <div className="card-header bg-secondary text-white text-center py-3">
                 <h5 className="mb-0">
-                  รายงานพฤติกรรมของผู้ใช้ภายในช่วงวันที่ {formatThaiDate(startDate)} - {formatThaiDate(endDate)}
+                  รายงานพฤติกรรมของผู้ใช้ภายในช่วงวันที่ {formatThaiDate(startDate)} ถึง {formatThaiDate(endDate)}
                 </h5>
               </div>
               <div className="card-body p-0">
@@ -179,13 +181,12 @@ function UserBehaviorReport() {
 
             {/* ส่วนกราฟ */}
             <div className="row g-4">
-              {/* กราฟแท่ง */}
               <div className="col-lg-8">
                 <div className="card shadow-sm border-0 h-100">
                   <div className="card-body text-center p-4">
                     <h4 className="fw-bold mb-1">พฤติกรรมผู้ใช้</h4>
                     <h5 className="text-muted mb-4">
-                      ({formatThaiDate(startDate)} - {formatThaiDate(endDate)})
+                      ({formatThaiDate(startDate)} ถึง {formatThaiDate(endDate)})
                     </h5>
                     <div style={{ height: "350px" }}>
                       <Bar 
@@ -201,13 +202,12 @@ function UserBehaviorReport() {
                 </div>
               </div>
 
-              {/* กราฟ Pie */}
               <div className="col-lg-4">
                 <div className="card shadow-sm border-0 h-100">
                   <div className="card-body text-center p-4">
                     <h4 className="fw-bold mb-1">สัดส่วนรวม ลูกค้าทุกราย</h4>
                     <h5 className="text-muted mb-4">
-                      ({formatThaiDate(startDate)} - {formatThaiDate(endDate)})
+                      ({formatThaiDate(startDate)} ถึง {formatThaiDate(endDate)})
                     </h5>
                     <div style={{ height: "300px", display: "flex", justifyContent: "center" }}>
                       <Pie 
@@ -215,7 +215,7 @@ function UserBehaviorReport() {
                         options={{ 
                           responsive: true, 
                           maintainAspectRatio: false,
-                          plugins: { legend: { position: 'right' } }
+                          plugins: { legend: { position: 'bottom' } }
                         }} 
                       />
                     </div>
