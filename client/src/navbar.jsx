@@ -22,7 +22,7 @@ function Navbar() {
   const canAccessEmp          = allowedScreens.includes("S04");
   const canAccessPas          = allowedScreens.includes("S05");
   const canAccessPermission   = allowedScreens.includes("S06");
-  
+  const canAccessSchedulePage = allowedScreens.includes("S07");
   const handleLogout = () => {
     localStorage.removeItem("user");
     navigate("/login");
@@ -100,6 +100,14 @@ function Navbar() {
             <li className="nav-item">
               <Link className="nav-link" to="/permission">
                 Permission
+              </Link>
+            </li>
+          )}
+
+          {canAccessSchedulePage && (
+            <li className="nav-item">
+              <Link className="nav-link" to="/schedule">
+                Schedule
               </Link>
             </li>
           )}

@@ -16,6 +16,7 @@ import Report from "./Report";
 import Driver from "./Driver";
 import Booking from "./Booking";
 import { AuthProvider } from "./context/AuthContext";
+import ScheduleManager from "./ScheduleManager";
 
 // ==========================================
 // 1. สร้างฟังก์ชันคำนวณหน้าซ้ายสุดที่ผู้ใช้มีสิทธิ์
@@ -35,7 +36,8 @@ const RootRedirect = () => {
   if (allowed.includes("S04")) return <Navigate to="/employee" replace />;
   if (allowed.includes("S05")) return <Navigate to="/passenger" replace />;
   if (allowed.includes("S06")) return <Navigate to="/permission" replace />;
-
+  if (allowed.includes("S07")) return <Navigate to="/schedule" replace />;
+  
   // ถ้าไม่มีสิทธิ์อะไรเลย ให้กลับไปหน้า login
   return <Navigate to="/login" replace />;
 };
@@ -101,6 +103,14 @@ const router = createBrowserRouter([
     element: (
       <ProtectedRoute requiredScreenCode="S06">
         <Permission />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/schedule",
+    element: (
+      <ProtectedRoute requiredScreenCode="S07">
+        <ScheduleManager />
       </ProtectedRoute>
     ),
   },
