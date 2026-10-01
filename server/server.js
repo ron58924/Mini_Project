@@ -789,7 +789,6 @@ app.post('/api/admin/schedules/create', async (req, res) => {
   try {
     connection = await getConnection();
     
-    // เช็คก่อนว่าเส้นทางที่จะสร้าง มีการเรียงจุดจอดไว้หรือยัง
     const routeRes = await connection.execute(`SELECT stop_code, avg_travel_minutes FROM route_details WHERE route_code = :1 ORDER BY stop_order ASC`, [route_code]);
     if (routeRes.rows.length === 0) {
       return res.status(400).json({ message: "ไม่สามารถสร้างรอบรถได้ เนื่องจากเส้นทางนี้ยังไม่ได้ระบุจุดจอดรถ" });
@@ -803,12 +802,18 @@ app.post('/api/admin/schedules/create', async (req, res) => {
     });
     const schedule_code = `SCH_${String(maxNum + 1).padStart(2, '0')}`;
 
-    // บันทึก travel_date และ status ลงตาราง schedules ด้วย
     await connection.execute(
       `INSERT INTO schedules (schedule_code, route_code, vehicle_code, driver_code, start_time, travel_date, status) 
        VALUES (:1, :2, :3, :4, :5, TO_DATE(:6, 'YYYY-MM-DD'), 'ACTIVE')`,
       [schedule_code, route_code, vehicle_code, driver_code, start_time, travel_date], { autoCommit: false }
     );
+
+    // ฟังก์ชันสร้าง string วันที่และเวลาตาม Local Time เครื่องของเรา (แก้ปัญหาเวลาเพี้ยน 7 ชม.)
+    const getLocalTimeStr = (date) => {
+      const pad = (n) => (n < 10 ? '0' + n : n);
+      return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + ' ' +
+             pad(date.getHours()) + ':' + pad(date.getMinutes()) + ':00';
+    };
 
     let cumulativeMinutes = 0;
     const baseDate = new Date(`${travel_date}T${start_time}:00`);
@@ -817,8 +822,9 @@ app.post('/api/admin/schedules/create', async (req, res) => {
       const stop_code = routeRes.rows[i][0];
       const avg_minutes = routeRes.rows[i][1] || 0;
       cumulativeMinutes += avg_minutes;
+      
       const expectedTime = new Date(baseDate.getTime() + cumulativeMinutes * 60000);
-      const exp_time_str = expectedTime.toISOString().replace('T', ' ').substring(0, 19);
+      const exp_time_str = getLocalTimeStr(expectedTime); // ใช้วิธี Format เองแทน toISOString()
       const log_code = `TL_${schedule_code}_${i+1}`;
 
       await connection.execute(
@@ -869,7 +875,6 @@ app.put('/api/admin/schedules/:code', async (req, res) => {
       return res.status(400).json({ message: "ไม่สามารถเปลี่ยนเป็นเส้นทางนี้ได้ เนื่องจากยังไม่มีการกำหนดจุดจอด" });
     }
 
-    // อัปเดตข้อมูลทั้งหมด รวมทั้ง travel_date
     await connection.execute(`
       UPDATE schedules 
       SET vehicle_code = :1, driver_code = :2, route_code = :3, start_time = :4, travel_date = TO_DATE(:5, 'YYYY-MM-DD')
@@ -877,6 +882,13 @@ app.put('/api/admin/schedules/:code', async (req, res) => {
     `, [vehicle_code, driver_code, route_code, start_time, travel_date, code], { autoCommit: false });
 
     await connection.execute(`DELETE FROM trip_logs WHERE schedule_code = :1`, [code], { autoCommit: false });
+
+    // ฟังก์ชันสร้าง string วันที่และเวลาตาม Local Time 
+    const getLocalTimeStr = (date) => {
+      const pad = (n) => (n < 10 ? '0' + n : n);
+      return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + ' ' +
+             pad(date.getHours()) + ':' + pad(date.getMinutes()) + ':00';
+    };
 
     let cumulativeMinutes = 0;
     const baseDate = new Date(`${travel_date}T${start_time}:00`);
@@ -887,7 +899,7 @@ app.put('/api/admin/schedules/:code', async (req, res) => {
       cumulativeMinutes += avg_minutes;
       
       const expectedTime = new Date(baseDate.getTime() + cumulativeMinutes * 60000);
-      const exp_time_str = expectedTime.toISOString().replace('T', ' ').substring(0, 19);
+      const exp_time_str = getLocalTimeStr(expectedTime); // ใช้ Format เวลาที่แก้แล้ว
       const log_code = `TL_${code}_${i+1}`;
 
       await connection.execute(
@@ -907,6 +919,7 @@ app.put('/api/admin/schedules/:code', async (req, res) => {
     if (connection) await connection.close();
   }
 });
+
 app.delete('/api/admin/schedules/:code', async (req, res) => {
   const { code } = req.params;
   let connection;
