@@ -403,11 +403,10 @@ app.put("/api/role-permissions/:roleCode", async (req, res) => {
     if (connection) await connection.close();
   }
 });
+
 // ==========================================
 // DRIVER PANEL
 // ==========================================
-
-// 1. ดึงรอบรถที่มอบหมายให้คนขับคนนี้
 app.get("/api/driver/schedules", async (req, res) => {
   const { driver_code } = req.query;
   let connection;
@@ -433,7 +432,6 @@ app.get("/api/driver/schedules", async (req, res) => {
   }
 });
 
-// 2. ดึงรายชื่อผู้โดยสาร
 app.get("/api/driver/passengers", async (req, res) => {
   const { schedule_code } = req.query;
   let connection;
@@ -453,7 +451,6 @@ app.get("/api/driver/passengers", async (req, res) => {
   }
 });
 
-// 3. ดึงข้อมูลจุดจอด (ดึงเวลา Arrive และ Depart)
 app.get("/api/driver/trip-logs", async (req, res) => {
   const { schedule_code } = req.query;
   let connection;
@@ -478,7 +475,6 @@ app.get("/api/driver/trip-logs", async (req, res) => {
   }
 });
 
-// 4. API: กดยืนยันว่า "ถึงป้าย" (Arrive)
 app.put("/api/driver/trip-logs/:log_code/arrive", async (req, res) => {
   const { log_code } = req.params;
   let connection;
@@ -506,17 +502,15 @@ app.put("/api/driver/trip-logs/:log_code/arrive", async (req, res) => {
   }
 });
 
-// 5. API: กดยืนยันว่า "ออกรถ" (Depart) + กวาดล้างที่นั่ง No Show ทันที
 app.put("/api/driver/trip-logs/:log_code/depart", async (req, res) => {
   const { log_code } = req.params;
   let connection;
   try {
     connection = await getConnection();
     
-    // 1. เซ็ตเวลาออกรถ
     await connection.execute(`UPDATE trip_logs SET depart_timestamp = SYSTIMESTAMP WHERE log_code = :log_code`, { log_code }, { autoCommit: false });
 
-    // 2. [ตัด No-Show ทันที] ใครจองขึ้นป้ายนี้ แล้วยังไม่สแกนตั๋ว ให้ปรับสถานะและคืนที่นั่ง
+    // ตัด No-Show ทันที
     await connection.execute(`
       UPDATE bookings 
       SET status = 'NO_SHOW' 
@@ -533,7 +527,6 @@ app.put("/api/driver/trip-logs/:log_code/depart", async (req, res) => {
   }
 });
 
-// 6. เช็คอินสแกนตั๋ว
 app.post("/api/driver/check-in", async (req, res) => {
   const { qr_code, schedule_code } = req.body;
   if (!qr_code || !schedule_code) return res.status(400).json({ message: "กรุณาระบุ QR Code และรอบรถ" });
@@ -602,8 +595,9 @@ app.get('/api/stations', async (req, res) => {
     if (connection) await connection.close();
   }
 });
+
 // ==========================================
-// API: ค้นหารอบรถแบบ Smart Search (แก้บั๊กคำนวณที่นั่งแบบ 100%)
+// API: ค้นหารอบรถแบบ Smart Search (แก้ไขบั๊กซ่อนรถที่ขับผ่านไปแล้ว)
 // ==========================================
 app.get('/api/booking/search', async (req, res) => {
   const { pickup_code, dropoff_code, travel_date } = req.query;
@@ -621,10 +615,10 @@ app.get('/api/booking/search', async (req, res) => {
       )
     `, [], { autoCommit: true });
 
-    // 2. ใช้ WITH Clause คำนวณการทับซ้อนของที่นั่ง (หักลบคนที่อยู่บนรถตามสถานีได้อย่างแม่นยำ)
+    // 2. ใช้ WITH Clause คำนวณการทับซ้อนของที่นั่ง (หักลบคนที่อยู่บนรถตามสถานีได้อย่างแม่นยำ และกรองรถที่ออกไปแล้ว)
     const query = `
       WITH OrderedLogs AS (
-          SELECT t.log_code, t.schedule_code, t.stop_code, t.expected_timestamp, 
+          SELECT t.log_code, t.schedule_code, t.stop_code, t.expected_timestamp, t.depart_timestamp, 
                  ROW_NUMBER() OVER (PARTITION BY t.schedule_code ORDER BY t.expected_timestamp ASC) as stop_order
           FROM trip_logs t
           JOIN schedules s ON t.schedule_code = s.schedule_code
@@ -639,6 +633,7 @@ app.get('/api/booking/search', async (req, res) => {
           WHERE p.stop_code = :pickup_code AND d.stop_code = :dropoff_code AND p.stop_order < d.stop_order 
             AND p.expected_timestamp > (SYSTIMESTAMP + INTERVAL '20' MINUTE)
             AND NVL(sch.status, 'ACTIVE') != 'COMPLETED'
+            AND p.depart_timestamp IS NULL -- [🔥 แก้บัคตรงนี้] เช็คว่าคนขับต้องยังไม่กดออกจากป้ายที่เราจะขึ้น
       ),
       BookingOrders AS (
           SELECT b.booking_code, b.passenger_count, p.schedule_code, p.stop_order as p_order, d.stop_order as d_order
@@ -761,8 +756,10 @@ app.post('/api/bookings/create', async (req, res) => {
     } finally {
         if (connection) await connection.close();
     }
-});// ==========================================
-// API: ดึงประวัติการจองของผู้ใช้งาน (เพิ่มเช็คสถานะ ONGOING)
+});
+
+// ==========================================
+// API: ดึงประวัติการจองของผู้ใช้งาน
 // ==========================================
 app.get('/api/user/bookings/:userCode', async (req, res) => {
   let connection;
@@ -779,12 +776,12 @@ app.get('/api/user/bookings/:userCode', async (req, res) => {
       )
     `, [], { autoCommit: true });
 
-    // ดึงข้อมูลตั๋ว พร้อมพ่วงสถานะของรถ (s.status) มาเช็คด้วย
     const query = `
       SELECT b.booking_code, TO_CHAR(b.travel_date, 'YYYY-MM-DD') as travel_date, 
              b.passenger_count, b.status, b.qr_code, s.start_time, r.route_name, 
              sp.stop_name as pickup_name, sd.stop_name as dropoff_name, 
-             NVL(s.status, 'ACTIVE') as schedule_status
+             NVL(s.status, 'ACTIVE') as schedule_status,
+             td.actual_timestamp 
       FROM bookings b 
       JOIN trip_logs tp ON b.pickup_log_code = tp.log_code 
       JOIN stations sp ON tp.stop_code = sp.stop_code 
@@ -797,12 +794,14 @@ app.get('/api/user/bookings/:userCode', async (req, res) => {
     const result = await connection.execute(query, { userCode });
     
     res.json(result.rows.map(row => {
-      let derivedStatus = row[3]; // สถานะของตั๋ว
-      const scheduleStatus = row[9]; // สถานะของรถ
+      let derivedStatus = row[3]; 
+      const scheduleStatus = row[9]; 
+      const dropoffActualTime = row[10]; 
       
-      // ทริค: ถ้าคนขับสแกนตั๋วให้แล้ว (COMPLETED) แต่รถยังวิ่งไม่จบ (ACTIVE) ให้เปลี่ยนป้ายเป็น "ONGOING"
-      if (derivedStatus === 'COMPLETED' && scheduleStatus !== 'COMPLETED') {
-        derivedStatus = 'ONGOING';
+      if (derivedStatus === 'COMPLETED') {
+        if (!dropoffActualTime && scheduleStatus !== 'COMPLETED') {
+          derivedStatus = 'ONGOING';
+        }
       }
 
       return { 
@@ -886,10 +885,7 @@ app.get('/api/admin/master-data', async (req, res) => {
     connection = await getConnection();
     const routesRes = await connection.execute(`SELECT route_code, route_name FROM routes ORDER BY route_code`);
     const driversRes = await connection.execute(`SELECT user_code, first_name || ' ' || last_name FROM users WHERE role_code IN ('R02', 'EMP') ORDER BY user_code`);
-    
-    // อัปเดต: ดึง v.type_code มาด้วย เพื่อให้ฟอร์มแก้ไขรถรู้ว่ารถคันนี้เป็นประเภทไหน
     const vehiclesRes = await connection.execute(`SELECT v.vehicle_code, v.capacity, v.license_plate, t.type_name, v.type_code FROM vehicles v LEFT JOIN vehicle_types t ON v.type_code = t.type_code ORDER BY v.vehicle_code`);
-    
     const vTypesRes = await connection.execute(`SELECT type_code, type_name FROM vehicle_types ORDER BY type_code`);
     
     res.json({ 
@@ -909,7 +905,6 @@ app.get('/api/admin/schedules', async (req, res) => {
   let connection;
   try {
     connection = await getConnection();
-    // เปลี่ยนมาดึง travel_date จากตาราง schedules โดยตรง
     const result = await connection.execute(`
       SELECT s.schedule_code, r.route_name, s.start_time, v.vehicle_code, u.first_name,
         TO_CHAR(s.travel_date, 'YYYY-MM-DD') as travel_date, s.driver_code
@@ -929,6 +924,7 @@ app.get('/api/admin/schedules', async (req, res) => {
     if (connection) await connection.close(); 
   }
 });
+
 app.post('/api/admin/schedules/create', async (req, res) => {
   const { route_code, vehicle_code, driver_code, start_time, travel_date } = req.body;
   let connection;
@@ -954,7 +950,6 @@ app.post('/api/admin/schedules/create', async (req, res) => {
       [schedule_code, route_code, vehicle_code, driver_code, start_time, travel_date], { autoCommit: false }
     );
 
-    // ฟังก์ชันสร้าง string วันที่และเวลาตาม Local Time เครื่องของเรา (แก้ปัญหาเวลาเพี้ยน 7 ชม.)
     const getLocalTimeStr = (date) => {
       const pad = (n) => (n < 10 ? '0' + n : n);
       return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + ' ' +
@@ -970,7 +965,7 @@ app.post('/api/admin/schedules/create', async (req, res) => {
       cumulativeMinutes += avg_minutes;
       
       const expectedTime = new Date(baseDate.getTime() + cumulativeMinutes * 60000);
-      const exp_time_str = getLocalTimeStr(expectedTime); // ใช้วิธี Format เองแทน toISOString()
+      const exp_time_str = getLocalTimeStr(expectedTime); 
       const log_code = `TL_${schedule_code}_${i+1}`;
 
       await connection.execute(
@@ -988,9 +983,6 @@ app.post('/api/admin/schedules/create', async (req, res) => {
   }
 });
 
-// ==========================================
-// API: แก้ไขข้อมูลรอบรถ (และสร้างจุดจอดใหม่ให้อัตโนมัติ)
-// ==========================================
 app.put('/api/admin/schedules/:code', async (req, res) => {
   const { code } = req.params;
   const { vehicle_code, driver_code, route_code, start_time, travel_date } = req.body;
@@ -1029,7 +1021,6 @@ app.put('/api/admin/schedules/:code', async (req, res) => {
 
     await connection.execute(`DELETE FROM trip_logs WHERE schedule_code = :1`, [code], { autoCommit: false });
 
-    // ฟังก์ชันสร้าง string วันที่และเวลาตาม Local Time 
     const getLocalTimeStr = (date) => {
       const pad = (n) => (n < 10 ? '0' + n : n);
       return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + ' ' +
@@ -1045,7 +1036,7 @@ app.put('/api/admin/schedules/:code', async (req, res) => {
       cumulativeMinutes += avg_minutes;
       
       const expectedTime = new Date(baseDate.getTime() + cumulativeMinutes * 60000);
-      const exp_time_str = getLocalTimeStr(expectedTime); // ใช้ Format เวลาที่แก้แล้ว
+      const exp_time_str = getLocalTimeStr(expectedTime); 
       const log_code = `TL_${code}_${i+1}`;
 
       await connection.execute(
@@ -1083,7 +1074,6 @@ app.delete('/api/admin/schedules/:code', async (req, res) => {
   }
 });
 
-// Vechicles
 app.post('/api/admin/vehicles', async (req, res) => {
   const { vehicle_code, type_code, license_plate, capacity } = req.body;
   let connection;
@@ -1093,9 +1083,7 @@ app.post('/api/admin/vehicles', async (req, res) => {
     res.status(201).json({ message: "เพิ่มยานพาหนะสำเร็จ" });
   } catch (err) { res.status(500).json({ message: "รหัสยานพาหนะอาจซ้ำกัน", error: err.message }); } finally { if (connection) await connection.close(); }
 });
-// ==========================================
-// API: แก้ไขยานพาหนะ (Vehicles)
-// ==========================================
+
 app.put('/api/admin/vehicles/:code', async (req, res) => {
   const { code } = req.params;
   const { type_code, license_plate, capacity } = req.body;
@@ -1125,7 +1113,6 @@ app.delete('/api/admin/vehicles/:code', async (req, res) => {
   } catch (err) { res.status(500).json({ message: "ไม่สามารถลบได้ อาจถูกใช้งานอยู่", error: err.message }); } finally { if (connection) await connection.close(); }
 });
 
-// Routes
 app.get('/api/admin/routes/:routeCode/details', async (req, res) => {
   let connection;
   try {
@@ -1162,9 +1149,7 @@ app.put('/api/admin/routes/:code/details', async (req, res) => {
     res.status(500).json({ message: "ไม่สามารถบันทึกเส้นทางได้", error: err.message });
   } finally { if (connection) await connection.close(); }
 });
-// ==========================================
-// ADMIN CRUD: Routes (เส้นทาง) - ลบ
-// ==========================================
+
 app.delete('/api/admin/routes/:code', async (req, res) => {
   const { code } = req.params;
   let connection;
@@ -1180,9 +1165,6 @@ app.delete('/api/admin/routes/:code', async (req, res) => {
   } finally { if (connection) await connection.close(); }
 });
 
-// ==========================================
-// ADMIN CRUD: Stations (จุดจอดรถ)
-// ==========================================
 app.post('/api/admin/stations', async (req, res) => {
   const { stop_code, stop_name } = req.body;
   let connection;
@@ -1214,9 +1196,6 @@ app.delete('/api/admin/stations/:code', async (req, res) => {
   } catch (err) { res.status(500).json({ message: "ไม่สามารถลบได้ อาจมีเส้นทางใช้งานป้ายนี้อยู่", error: err.message }); } finally { if (connection) await connection.close(); }
 });
 
-// ==========================================
-// START SERVER
-// ==========================================
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
