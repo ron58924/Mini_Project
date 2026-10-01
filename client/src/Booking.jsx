@@ -35,6 +35,9 @@ const Booking = () => {
   const [historyBookings, setHistoryBookings] = useState([]);
   const [historyFilter, setHistoryFilter] = useState('ACTIVE');
 
+  // [เพิ่มใหม่] State สำหรับจัดการ QR Code แบบขยายเต็มจอ
+  const [selectedQRCode, setSelectedQRCode] = useState(null);
+
   const [popup, setPopup] = useState({ show: false, title: '', message: '', type: 'info', isConfirm: false, onConfirm: null });
 
   const showAlert = (title, message, type = 'info') => {
@@ -241,6 +244,34 @@ const Booking = () => {
   return (
     <div className="bg-light min-vh-100 position-relative pb-5">
       
+      {/* =========================================
+          MODAL: สำหรับขยาย QR Code แบบเต็มหน้าจอ
+      ========================================= */}
+      {selectedQRCode && (
+        <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate-fade-in" style={{ zIndex: 10000, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(5px)' }}>
+          <div className="bg-white rounded-4 shadow-lg p-4 text-center position-relative mx-3" style={{ maxWidth: '380px', width: '100%' }}>
+            <button className="btn-close position-absolute top-0 end-0 m-3" onClick={() => setSelectedQRCode(null)}></button>
+            <h4 className="fw-bold mb-3 text-dark mt-2">สแกนเพื่อขึ้นรถ</h4>
+            
+            <div className="bg-light p-3 border rounded-4 d-inline-block mb-3 shadow-sm">
+              <QRCodeSVG value={selectedQRCode.qr_code} size={220} />
+            </div>
+            
+            <div className="fw-bold fs-3 text-dark mb-1" style={{ letterSpacing: '1px' }}>{selectedQRCode.booking_code}</div>
+            
+            <div className="bg-danger bg-opacity-10 text-danger rounded-3 p-3 mb-4 mt-2">
+              <p className="mb-0 fw-bold">กรุณาแสดง QR Code นี้ให้คนขับสแกน</p>
+              <p className="small mb-0">เพื่อยืนยันสิทธิ์ในการขึ้นรถของคุณ</p>
+            </div>
+            
+            <button className="btn text-white w-100 rounded-pill fw-bold py-3 shadow-sm fs-6" style={{ backgroundColor: mutRed }} onClick={() => setSelectedQRCode(null)}>
+              ปิดหน้าต่าง
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: แจ้งเตือนทั่วไป */}
       {popup.show && (
         <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate-fade-in" style={{ zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(3px)' }}>
           <div className="bg-white rounded-4 shadow-lg p-4 text-center position-relative" style={{ maxWidth: '400px', width: '90%' }}>
@@ -551,13 +582,25 @@ const Booking = () => {
 
                             {item.status === 'ACTIVE' && (
                               <div className="mt-4 pt-4 border-top d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
-                                <div className="d-flex align-items-center">
-                                  <div className="bg-white p-2 border rounded-3 me-3 shadow-sm"><QRCodeSVG value={item.qr_code} size={60} /></div>
+                                
+                                {/* ปรับปรุงส่วน QR Code ให้กดขยายได้ */}
+                                <div 
+                                  className="d-flex align-items-center cursor-pointer p-2 rounded-4 interactive-card" 
+                                  onClick={() => setSelectedQRCode(item)} 
+                                  style={{ transition: 'all 0.2s', border: '1px solid transparent' }}
+                                  onMouseOver={(e) => e.currentTarget.style.border = '1px solid #e2e8f0'}
+                                  onMouseOut={(e) => e.currentTarget.style.border = '1px solid transparent'}
+                                >
+                                  <div className="bg-white p-2 border rounded-3 me-3 shadow-sm text-center">
+                                    <QRCodeSVG value={item.qr_code} size={60} />
+                                    <div className="text-danger mt-1 fw-bold" style={{ fontSize: '10px' }}>🔍 กดขยาย</div>
+                                  </div>
                                   <div>
                                     <div className="small text-muted mb-1">รหัสการจองตั๋ว</div>
                                     <div className="fw-bold fs-5 text-dark" style={{ letterSpacing: '1px' }}>{item.booking_code}</div>
                                   </div>
                                 </div>
+
                                 <button onClick={() => handleCancelBooking(item.booking_code)} className="btn btn-outline-danger rounded-pill px-5 py-2 fw-bold interactive-card w-100" style={{ maxWidth: '200px' }}>
                                   ยกเลิกการจอง
                                 </button>
