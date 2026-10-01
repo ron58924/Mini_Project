@@ -5,19 +5,27 @@
 }
 
 .register-page {
+  position: relative;
   min-height: 100vh;
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 32px 20px;
+  padding: 40px 20px;
   font-family: "Prompt", sans-serif;
-  background: radial-gradient(
-      circle at 50% 20%,
-      rgba(211, 47, 47, 0.08),
-      transparent 50%
-    ),
-    #f8fafc;
+  background-color: #ffffff;
+  overflow: hidden;
+}
+
+/* Canvas พื้นหลังวิ่งเด้งชนขอบจอ */
+.bounce-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
 }
 
 /* =========================
@@ -25,18 +33,18 @@
 ========================= */
 .register-card {
   position: relative;
-  width: 460px;
+  z-index: 10;
+  width: 480px;
   max-width: 100%;
-  padding: 32px;
+  padding: 36px 40px;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 20px;
-  background: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.8);
+  align-items: center;
+  gap: 18px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
   border-radius: 24px;
-  box-shadow: 0px 20px 45px -10px rgba(211, 47, 47, 0.15),
-    0px 10px 20px -8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0px 10px 40px rgba(0, 0, 0, 0.06);
 }
 
 /* =========================
@@ -48,24 +56,21 @@
   flex-direction: column;
   align-items: center;
   gap: 4px;
+  margin-bottom: 4px;
 }
 
 .register-header h2 {
   margin: 0;
-  padding-top: 4px;
-  color: #282020;
-  font-size: 28px;
-  line-height: 30px;
-  font-weight: 900;
-  letter-spacing: -0.5px;
+  color: #1e293b;
+  font-size: 22px;
+  font-weight: 700;
   text-align: center;
 }
 
 .register-header p {
   margin: 0;
-  color: #64748b;
+  color: #94a3b8;
   font-size: 13px;
-  line-height: 30px;
   font-weight: 300;
   text-align: center;
 }
@@ -84,7 +89,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   flex: 1;
 }
 
@@ -94,14 +99,13 @@
 
 .field label {
   width: 100%;
-  color: #334155;
-  font-size: 13px;
-  line-height: 16px;
-  font-weight: 500;
+  color: #1e293b;
+  font-size: 12.5px;
+  font-weight: 600;
 }
 
 .field label span {
-  color: #d32f2f;
+  color: #dc2626;
 }
 
 .field-row {
@@ -113,41 +117,51 @@
 
 .field-error {
   margin: 2px 0 0;
-  color: #d32f2f;
-  font-size: 11.5px;
-  line-height: 14px;
+  color: #dc2626;
+  font-size: 11px;
   font-weight: 400;
 }
 
 /* =========================
-   Input
+   Inputs & Select
 ========================= */
-.field input {
+.field input,
+.form-select {
   width: 100%;
   height: 42px;
-  padding: 9px 14px;
+  padding: 0 14px;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: 10px;
   outline: none;
-  background: #fafbfc;
+  background: #f8fafc;
   color: #0f172a;
   font-family: "Prompt", sans-serif;
-  font-size: 14px;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  font-size: 13.5px;
+  transition: all 0.2s ease;
+}
+
+.form-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2394A3B8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px top 50%;
+  background-size: 10px auto;
+  cursor: pointer;
 }
 
 .field input::placeholder {
-  color: #94a3b8;
+  color: #cbd5e1;
 }
 
-.field input:focus {
-  border-color: #d32f2f;
+.field input:focus,
+.form-select:focus {
+  border-color: #dc2626;
   background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(211, 47, 47, 0.12);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.08);
 }
 
 /* =========================
-   Password
+   Password Field
 ========================= */
 .password-input {
   position: relative;
@@ -155,7 +169,7 @@
 }
 
 .password-input input {
-  padding-right: 42px;
+  padding-right: 40px;
 }
 
 .eye-button {
@@ -181,12 +195,15 @@
 /* =========================
    Agreement Checkbox
 ========================= */
+.terms-container {
+  margin-top: 2px;
+}
+
 .agreement {
   width: 100%;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 0;
   cursor: pointer;
   user-select: none;
 }
@@ -205,25 +222,25 @@
   align-items: center;
   justify-content: center;
   border: 1px solid #cbd5e1;
-  border-radius: 5px;
+  border-radius: 4px;
   color: #ffffff;
   font-size: 11px;
   font-weight: 700;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: all 0.15s ease;
 }
 
 .agreement input:checked + .custom-checkbox {
-  background: #d32f2f;
-  border-color: #d32f2f;
+  background: #dc2626;
+  border-color: #dc2626;
 }
 
 .agreement-text {
   color: #475569;
-  font-size: 12px;
+  font-size: 11.5px;
 }
 
 .agreement-text strong {
-  color: #d32f2f;
+  color: #dc2626;
   font-weight: 600;
 }
 
@@ -232,26 +249,26 @@
 ========================= */
 .register-button {
   width: 100%;
-  height: 42px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 10px 16px;
+  margin-top: 6px;
   border: none;
   border-radius: 12px;
-  background: linear-gradient(180deg, #e53935 0%, #b71c1c 100%);
+  background: #cc1823;
   color: #ffffff;
   font-family: "Prompt", sans-serif;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 6px 16px rgba(211, 47, 47, 0.25);
-  transition: opacity 0.2s ease, transform 0.1s ease;
+  box-shadow: 0 4px 12px rgba(204, 24, 35, 0.25);
+  transition: background-color 0.2s ease, transform 0.1s ease;
 }
 
 .register-button:hover {
-  opacity: 0.95;
+  background: #b9151e;
 }
 
 .register-button:active {
@@ -272,19 +289,18 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding-top: 14px;
-  border-top: 1px solid #f1f5f9;
-  color: #475569;
-  font-size: 13px;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12.5px;
 }
 
 .login-link {
   padding: 0;
   border: 0;
   background: transparent;
-  color: #d32f2f;
+  color: #cc1823;
   font-family: "Prompt", sans-serif;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -294,9 +310,9 @@
 }
 
 /* Responsive */
-@media (max-width: 480px) {
+@media (max-width: 520px) {
   .register-card {
-    padding: 24px 18px;
+    padding: 28px 20px;
   }
   .field-row {
     flex-direction: column;
