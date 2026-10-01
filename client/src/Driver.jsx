@@ -192,6 +192,7 @@ function Driver() {
     return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
   };
 
+  // จัดกลุ่มรอบประวัติ (History)
   const groupedHistory = historySchedules.reduce((groups, sch) => {
     const date = sch.travel_date || 'ไม่ระบุวันที่';
     if (!groups[date]) groups[date] = [];
@@ -204,8 +205,26 @@ function Driver() {
     if (b === 'ไม่ระบุวันที่') return -1;
     return new Date(b) - new Date(a);
   });
+// จัดกลุ่มรอบรอรับส่ง (Active) ตามวันที่
+  const groupedActive = activeSchedules.reduce((groups, sch) => {
+    const date = sch.travel_date || 'ไม่ระบุวันที่';
+    if (!groups[date]) groups[date] = [];
+    groups[date].push(sch);
+    return groups;
+  }, {});
 
+  // เรียงลำดับวันที่ จากใกล้สุดไปไกลสุด
+  const sortedActiveDates = Object.keys(groupedActive).sort((a, b) => {
+    if (a === 'ไม่ระบุวันที่') return 1;
+    if (b === 'ไม่ระบุวันที่') return -1;
+    return new Date(a) - new Date(b); 
+  });
+
+  // [เพิ่มใหม่] หาวันที่ปัจจุบัน (YYYY-MM-DD) เพื่อทำ Highlight
+  const todayObj = new Date();
+  const todayStr = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, '0')}-${String(todayObj.getDate()).padStart(2, '0')}`;
   return (
+
     <div className="position-relative min-vh-100" style={{ backgroundColor: "#f3f4f6" }}>
       <div className="position-absolute top-0 start-0 w-100" style={{ height: '220px', backgroundColor: mutRed, zIndex: 0, borderBottomLeftRadius: '24px', borderBottomRightRadius: '24px' }}></div>
 
@@ -241,17 +260,65 @@ function Driver() {
                   </div>
                 ) : (
                   <div className="driver-schedule-list">
-                    {activeSchedules.map((sch) => (
-                      <div key={sch.schedule_code} className="driver-schedule-item" onClick={() => { setSelectedSchedule(sch.schedule_code); setIsChoosingSchedule(false); }}>
-                        <div className="d-flex justify-content-between align-items-center mb-1">
-                          <span className="driver-schedule-time">{sch.start_time} น.</span>
-                          <span className={`driver-schedule-state ${selectedSchedule === sch.schedule_code ? 'is-active' : ''}`}>
-                            {selectedSchedule === sch.schedule_code ? 'กำลังปฏิบัติงาน' : 'รอดำเนินการ'}
-                          </span>
+                    {sortedActiveDates.map(date => {
+                      const isToday = date === todayStr; 
+                      // เช็คว่าเป็นวันที่ในอนาคตหรือไม่ (ถ้า date มากกว่าวันนี้ = อนาคต)
+                      const isFuture = date !== 'ไม่ระบุวันที่' && date > todayStr;
+                      
+                      return (
+                        <div key={date} className="mb-3">
+                          <div className="d-flex align-items-center mb-2 px-1">
+                            <span 
+                              className={`badge rounded-pill px-3 py-2 fw-bold shadow-sm ${isToday ? 'bg-danger text-white' : 'bg-danger bg-opacity-10 text-danger'}`} 
+                              style={{ fontSize: '12px' }}
+                            >
+                              <Calendar size={14} className="me-1 mb-1"/> 
+                              {isToday ? '📌 วันนี้ ' : (date !== 'ไม่ระบุวันที่' ? 'วันที่ ' : '')} 
+                              {formatThaiDate(date)}
+                            </span>
+                          </div>
+                          
+                          <div className="d-flex flex-column gap-2">
+                            {groupedActive[date].map((sch) => (
+                              <div 
+                                key={sch.schedule_code} 
+                                /* ถ้าเป็นอนาคต ให้ลดความเข้มลง (opacity-50) และทำสีพื้นหลังให้ดูเหมือนกดไม่ได้ */
+                                className={`driver-schedule-item ${isFuture ? 'opacity-50' : ''}`} 
+                                style={{ 
+                                  cursor: isFuture ? 'not-allowed' : 'pointer', 
+                                  backgroundColor: isFuture ? '#f9fafb' : '' 
+                                }}
+                                onClick={() => { 
+                                  if (isFuture) {
+                                    // ถ้าเผลอกด ให้โชว์ข้อความเตือนเล็กๆ
+                                    Swal.fire({
+                                      icon: 'info',
+                                      title: 'ยังไม่ถึงรอบให้บริการ',
+                                      text: 'คุณสามารถเริ่มงานรอบนี้ได้เมื่อถึงวันที่กำหนดเท่านั้น',
+                                      timer: 2000,
+                                      showConfirmButton: false,
+                                      position: 'center'
+                                    });
+                                  } else {
+                                    // ถ้าเป็นวันนี้ หรืออดีต ให้กดเข้าทำงานได้ปกติ
+                                    setSelectedSchedule(sch.schedule_code); 
+                                    setIsChoosingSchedule(false); 
+                                  }
+                                }}
+                              >
+                                <div className="d-flex justify-content-between align-items-center mb-1">
+                                  <span className="driver-schedule-time">{sch.start_time} น.</span>
+                                  <span className={`driver-schedule-state ${selectedSchedule === sch.schedule_code ? 'is-active' : ''} ${isFuture ? 'bg-secondary text-white' : ''}`}>
+                                    {isFuture ? 'ยังไม่ถึงรอบ' : (selectedSchedule === sch.schedule_code ? 'กำลังปฏิบัติงาน' : 'รอดำเนินการ')}
+                                  </span>
+                                </div>
+                                <span className="driver-schedule-route text-truncate">{sch.route_name}</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <span className="driver-schedule-route text-truncate">{sch.route_name}</span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )
               )}
@@ -303,10 +370,11 @@ function Driver() {
 
               <div className="driver-panel-card">
                 <h2 className="driver-section-title"><MapPin size={20} className="text-danger" /> จุดจอดรถ</h2>
-                <div className="driver-stop-list">
+             <div className="driver-stop-list">
                   {tripLogs.map((log, index) => {
-                    const isArrived = log.actual_time !== null;
-                    const isDeparted = log.depart_time !== null;
+                    // แก้ไขการเช็คค่าให้รัดกุม ป้องกัน undefined
+                    const isArrived = log.actual_time !== null && log.actual_time !== undefined;
+                    const isDeparted = log.depart_time !== null && log.depart_time !== undefined;
                     const isCurrent = currentStop && currentStop.log_code === log.log_code;
                     
                     return (
@@ -316,18 +384,25 @@ function Driver() {
                             {isDeparted ? <Check size={14} /> : isCurrent ? <Bus size={14} /> : index + 1}
                           </div>
                           <div>
-                            <h3 className={isCurrent ? 'text-danger fw-bold' : ''}>{log.stop_name}</h3>
+                            <h3 className={isCurrent ? 'text-danger fw-bold mb-1' : 'mb-1'}>{log.stop_name}</h3>
                             
+                            {/* กรณียังไม่ถึงป้าย */}
                             {!isArrived && (
-                              <span className="driver-eta-text"><Clock size={12} /> {log.expected_time}</span>
+                              <div className="text-muted small d-flex align-items-center">
+                                <Clock size={12} className="me-1" /> คาดว่าจะถึง: {log.expected_time} น.
+                              </div>
                             )}
                             
-                            {/* แสดงสถานะป้ายปัจจุบัน */}
+                            {/* กรณีถึงป้ายแล้ว แต่กำลังจอดรอผู้โดยสาร */}
                             {isArrived && !isDeparted && (
-                              <span className="badge bg-warning text-dark mt-1 px-2 d-inline-block">กำลังจอดรับผู้โดยสาร...</span>
+                              <div className="badge bg-warning text-dark mt-1 px-2 py-1">กำลังจอดรับผู้โดยสาร...</div>
                             )}
+
+                            {/* กรณีออกรถแล้ว */}
                             {isDeparted && (
-                              <span className="text-muted small mt-1 d-inline-block">ออกรถแล้ว: {log.depart_time} น.</span>
+                              <div className="text-muted small mt-1">
+                                ออกรถแล้ว: <span className="fw-bold text-success">{log.depart_time} น.</span>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -335,7 +410,7 @@ function Driver() {
                     );
                   })}
                 </div>
-
+                
                 {!isScheduleFinished && currentStop ? (
                   currentStop.actual_time === null ? (
                     <button className="driver-arrive-btn shadow-sm mt-4" onClick={() => handleArriveAtStop(currentStop.log_code, currentStop.stop_name)}>

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Navbar from './Navbar'; 
 import './Booking.css'; 
 import { useAuth } from './context/AuthContext'; 
-import { MapPin, Navigation, Users, Clock, Info, ShoppingBag, Trash2, CheckCircle2, XCircle, Search, CalendarDays, ChevronDown, AlertCircle, HelpCircle } from 'lucide-react';
+import { MapPin, Navigation, Users, Clock, Info, ShoppingBag, Trash2, CheckCircle2, XCircle, Search, CalendarDays, ChevronDown, AlertCircle, HelpCircle, UserX } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
 const Booking = () => {
@@ -14,6 +14,14 @@ const Booking = () => {
   const [dropoffCode, setDropoffCode] = useState('');
   const [passengerCount, setPassengerCount] = useState(1);
   
+  const getTodayYMD = () => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().split('T')[0];
+  };
+
+  const [travelDate, setTravelDate] = useState(getTodayYMD()); 
+
   const [showPickupDropdown, setShowPickupDropdown] = useState(false);
   const [showDropoffDropdown, setShowDropoffDropdown] = useState(false);
   const searchBoxRef = useRef(null);
@@ -24,8 +32,6 @@ const Booking = () => {
 
   const [cart, setCart] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [confirmedTickets, setConfirmedTickets] = useState([]);
-
   const [historyBookings, setHistoryBookings] = useState([]);
   const [historyFilter, setHistoryFilter] = useState('ACTIVE');
 
@@ -61,36 +67,33 @@ const Booking = () => {
       .catch(err => console.error(err));
   }, []);
 
-  // แก้ไข 1: ให้ดึงข้อมูลการจองทันทีที่มีข้อมูลผู้ใช้ เพื่อให้ตัวนับโควต้าทำงานได้ถูกต้องตลอดเวลา
   useEffect(() => {
     if (user?.user_code) {
       fetchHistoryBookings();
     }
-  }, [user, activeTab]); // อัปเดตทุกครั้งที่สลับหน้าต่างหรือรีเฟรช
+  }, [user, activeTab]);
 
   useEffect(() => {
-    if (!pickupCode || !dropoffCode || pickupCode === dropoffCode) {
+    if (!pickupCode || !dropoffCode || pickupCode === dropoffCode || !travelDate) {
       setSearchResults([]);
       setSelectedResult(null);
       return;
     }
     setIsLoadingSearch(true);
     setSelectedResult(null);
-    const localDate = new Date();
-    localDate.setMinutes(localDate.getMinutes() - localDate.getTimezoneOffset());
-    const today = localDate.toISOString().split('T')[0]; 
     
-    fetch(`http://localhost:5000/api/booking/search?pickup_code=${pickupCode}&dropoff_code=${dropoffCode}&travel_date=${today}`)
+    fetch(`http://localhost:5000/api/booking/search?pickup_code=${pickupCode}&dropoff_code=${dropoffCode}&travel_date=${travelDate}`)
       .then(res => res.json())
       .then(data => setSearchResults(data))
       .catch(err => console.error(err))
       .finally(() => setIsLoadingSearch(false));
-  }, [pickupCode, dropoffCode]);
+  }, [pickupCode, dropoffCode, travelDate]);
 
   const fetchHistoryBookings = () => {
     fetch(`http://localhost:5000/api/user/bookings/${user.user_code}`)
       .then(res => res.json())
-      .then(data => setHistoryBookings(data));
+      .then(data => setHistoryBookings(data))
+      .catch(err => console.error("Error fetching history:", err));
   };
 
   const getStationName = (code) => {
@@ -148,7 +151,8 @@ const Booking = () => {
       pickup_name: getStationName(pickupCode),
       dropoff_order: selectedResult.dropoff_order,
       dropoff_name: getStationName(dropoffCode),
-      passenger_count: passengerCount
+      passenger_count: passengerCount,
+      travel_date: travelDate 
     };
 
     setCart([...cart, newItem]);
@@ -160,7 +164,6 @@ const Booking = () => {
 
   const handleRemoveItem = (id) => setCart(cart.filter(item => item.id !== id));
 
-  // แก้ไข 2: นำข้อความแจ้งเตือนความผิดพลาดจาก Backend มาโชว์ให้ผู้ใช้อ่าน
   const handleConfirmCheckout = async () => {
     if (!user || !user.user_code) return showAlert('ผิดพลาด', 'กรุณาเข้าสู่ระบบก่อน', 'danger');
     if (cart.length === 0) return;
@@ -168,7 +171,6 @@ const Booking = () => {
     setIsSubmitting(true);
     let successCount = 0;
     let failMessages = [];
-    const createdTickets = [];
 
     try {
       for (const item of cart) {
@@ -177,7 +179,8 @@ const Booking = () => {
           schedule_code: item.schedule_code,
           pickup_order: item.pickup_order,
           dropoff_order: item.dropoff_order,
-          passenger_count: item.passenger_count
+          passenger_count: item.passenger_count,
+          travel_date: item.travel_date 
         };
         const response = await fetch('http://localhost:5000/api/bookings/create', {
           method: 'POST',
@@ -188,30 +191,25 @@ const Booking = () => {
         
         if (response.ok) {
           successCount++;
-          createdTickets.push({ ...item, ...result });
         } else {
-          // เก็บรายละเอียด Error ของแต่ละรายการไว้
           failMessages.push(`- ${item.route_name}: ${result.message}`);
         }
       }
 
-      fetchHistoryBookings(); // รีเฟรชโควต้าหลังจองเสร็จ
+      fetchHistoryBookings(); 
 
       if (successCount === cart.length) {
         setCart([]);
         setActiveTab('history');
         showAlert('จองตั๋วสำเร็จ', `คุณทำการจองตั๋วสำเร็จทั้งหมด ${successCount} รายการ`, 'success');
       } else if (successCount === 0) {
-        // กรณีไม่ผ่านเลยสักรายการ
         showAlert('ไม่สามารถจองตั๋วได้', failMessages.join('\n\n'), 'danger');
       } else {
-        // กรณีผ่านบางรายการ (เช่น จอง 2 รายการ แต่ติดโควต้ารายการที่ 2)
         showAlert(
           'จองสำเร็จบางส่วน', 
           `ทำรายการสำเร็จ ${successCount} รายการ\n\nพบปัญหา:\n${failMessages.join('\n')}`, 
           'warning'
         );
-        // เคลียร์รายการที่สำเร็จออกจากตะกร้า อาจจะให้ผู้ใช้เช็คและลบรายการที่เหลือเอง
       }
     } catch (err) {
       showAlert('ผิดพลาด', 'เกิดข้อผิดพลาดในการเชื่อมต่อเครือข่าย', 'danger');
@@ -243,7 +241,6 @@ const Booking = () => {
   return (
     <div className="bg-light min-vh-100 position-relative pb-5">
       
-      {/* Modal Popup */}
       {popup.show && (
         <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate-fade-in" style={{ zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(3px)' }}>
           <div className="bg-white rounded-4 shadow-lg p-4 text-center position-relative" style={{ maxWidth: '400px', width: '90%' }}>
@@ -269,7 +266,6 @@ const Booking = () => {
         </div>
       )}
 
-      {/* Half-Banner */}
       <div className="position-absolute top-0 start-0 w-100 shadow-sm" style={{ height: '320px', backgroundColor: mutRed, zIndex: 0, borderBottomLeftRadius: '32px', borderBottomRightRadius: '32px' }}></div>
 
       <div className="position-relative" style={{ zIndex: 1 }}>
@@ -309,7 +305,7 @@ const Booking = () => {
                 <div className="animate-fade-in">
                   <form onSubmit={handleAddToCart}>
                     
-                    <div ref={searchBoxRef} className="border rounded-4 p-3 p-md-4 mb-4 bg-white position-relative shadow-sm" style={{ zIndex: 10 }}>
+                    <div ref={searchBoxRef} className="border rounded-4 p-3 p-md-4 mb-3 bg-white position-relative shadow-sm" style={{ zIndex: 10 }}>
                       
                       <div className="position-absolute" style={{ left: '41px', top: '55px', bottom: '55px', width: '2px', backgroundColor: '#e2e8f0', zIndex: 0 }}></div>
 
@@ -358,6 +354,26 @@ const Booking = () => {
                       </div>
                     </div>
 
+                    <div className="d-flex align-items-center justify-content-between border rounded-4 p-3 p-md-4 mb-3 bg-white shadow-sm position-relative" style={{ zIndex: 1 }}>
+                      <div className="d-flex align-items-center w-100">
+                        <CalendarDays size={22} className="text-secondary me-3" />
+                        <div className="flex-fill">
+                          <div className="text-muted small fw-semibold mb-1">วันที่เดินทาง</div>
+                          <input 
+                            type="date" 
+                            className="form-control border-0 p-0 fw-bold fs-6 bg-transparent" 
+                            value={travelDate}
+                            min={getTodayYMD()} 
+                            onChange={(e) => {
+                              setTravelDate(e.target.value);
+                              setSelectedResult(null);
+                            }}
+                            style={{ cursor: 'pointer', outline: 'none', boxShadow: 'none' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="d-flex align-items-center justify-content-between border rounded-4 p-3 p-md-4 mb-4 bg-white shadow-sm position-relative" style={{ zIndex: 1 }}>
                       <div className="d-flex align-items-center">
                         <Users size={22} className="text-secondary me-3" />
@@ -373,14 +389,14 @@ const Booking = () => {
                       </div>
                     </div>
 
-                    {pickupCode && dropoffCode && (
+                    {pickupCode && dropoffCode && travelDate && (
                       <div className="mt-5 animate-fade-in">
                         <h6 className="fw-bold mb-4">เลือกรอบการเดินทาง</h6>
                         {isLoadingSearch && <div className="text-center text-muted py-5"><span className="spinner-border spinner-border-sm me-2 text-danger"></span>กำลังค้นหา...</div>}
                         {!isLoadingSearch && searchResults.length === 0 && (
                           <div className="text-center p-4 bg-light rounded-4 text-muted border border-dashed">
                             <Search size={32} className="opacity-50 mb-3 mx-auto" />
-                            <p className="mb-0 small">ไม่พบรอบรถในเส้นทาง/เวลาปัจจุบัน</p>
+                            <p className="mb-0 small">ไม่พบรอบรถในเส้นทางและเวลาที่คุณเลือก</p>
                           </div>
                         )}
 
@@ -452,7 +468,10 @@ const Booking = () => {
                         {cart.map((item) => (
                           <div key={item.id} className="bg-white p-3 p-md-4 rounded-4 border shadow-sm d-flex justify-content-between align-items-center">
                             <div className="flex-fill pe-2">
-                              <div className="fw-bold mb-1">{item.route_name}</div>
+                              <div className="fw-bold mb-1">
+                                {item.route_name}
+                                <span className="text-muted small fw-normal ms-2 d-inline-block">({formatThaiDate(item.travel_date)})</span>
+                              </div>
                               <div className="text-muted small" style={{ fontSize: '12px' }}>
                                 {item.pickup_name} <span className="fw-bold text-dark mx-1 text-nowrap">{item.schedule_time}</span> <span className="mx-1">→</span> {item.dropoff_name}
                               </div>
@@ -475,9 +494,10 @@ const Booking = () => {
               {/* --- HISTORY TAB --- */}
               {activeTab === 'history' && (
                 <div className="animate-fade-in">
+                  
                   <div className="d-flex gap-2 overflow-auto pb-3 mb-4 hide-scrollbar" style={{ whiteSpace: 'nowrap' }}>
-                    {['ACTIVE', 'COMPLETED', 'CANCELLED', 'ALL'].map(status => {
-                      const labels = { ACTIVE: 'กำลังจะเดินทาง', COMPLETED: 'เดินทางแล้ว', CANCELLED: 'ยกเลิก', ALL: 'ทั้งหมด' };
+                    {['ACTIVE', 'COMPLETED', 'NO_SHOW', 'CANCELLED', 'ALL'].map(status => {
+                      const labels = { ACTIVE: 'กำลังจะเดินทาง', COMPLETED: 'เดินทางแล้ว', NO_SHOW: 'ไม่มาแสดงตัว', CANCELLED: 'ยกเลิก', ALL: 'ทั้งหมด' };
                       const isActive = historyFilter === status;
                       return (
                         <button key={status} onClick={() => setHistoryFilter(status)} className={`btn rounded-pill px-4 py-2 small fw-bold border-0 interactive-card ${isActive ? 'text-white shadow-sm' : 'bg-light text-secondary border'}`} style={{ backgroundColor: isActive ? mutRed : '' }}>
@@ -504,6 +524,7 @@ const Booking = () => {
                             {item.status === 'ACTIVE' && <span className="badge bg-warning text-dark px-3 py-2 rounded-pill d-flex align-items-center"><Clock size={12} className="me-1"/> รอเดินทาง</span>}
                             {item.status === 'COMPLETED' && <span className="badge bg-success text-white px-3 py-2 rounded-pill d-flex align-items-center"><CheckCircle2 size={12} className="me-1"/> สำเร็จ</span>}
                             {item.status === 'CANCELLED' && <span className="badge bg-danger text-white px-3 py-2 rounded-pill d-flex align-items-center"><XCircle size={12} className="me-1"/> ยกเลิก</span>}
+                            {item.status === 'NO_SHOW' && <span className="badge bg-secondary text-white px-3 py-2 rounded-pill d-flex align-items-center"><UserX size={12} className="me-1"/> ไม่มาแสดงตัว</span>}
                           </div>
                           
                           <div className="card-body p-4">
