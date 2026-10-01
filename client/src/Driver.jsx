@@ -117,7 +117,7 @@ function Driver() {
     setIsScanning(false);
 
     const bookingCodeClean = scannedText.trim();
-    const matchedPassenger = passengers.find(p => p.booking_code === bookingCodeClean);
+    const matchedPassenger = passengers.find(p => p.qr_code === bookingCodeClean || p.booking_code === bookingCodeClean);
 
     if (matchedPassenger) {
       if (matchedPassenger.status === 'ACTIVE') {
@@ -131,12 +131,13 @@ function Driver() {
     }
   };
 
+  // กดยืนยันว่าถึงป้าย
   const handleArriveAtStop = async (logCode, stopName) => {
     const confirm = await Swal.fire({
       title: `ถึงจุดจอด ${stopName}?`,
       icon: "question",
       showCancelButton: true,
-      confirmButtonText: "ยืนยันถึงป้าย",
+      confirmButtonText: "ยืนยัน",
       cancelButtonText: "ยกเลิก",
       confirmButtonColor: mutRed
     });
@@ -145,33 +146,52 @@ function Driver() {
       try {
         await axios.put(`${API_URL}/driver/trip-logs/${logCode}/arrive`);
         await fetchTripLogs(selectedSchedule); 
-        if (user && user.user_code) {
-          await fetchSchedules(user.user_code);
-        }
+        if (user && user.user_code) await fetchSchedules(user.user_code);
       } catch (error) {
         Swal.fire({ icon: "error", title: "เกิดข้อผิดพลาด", text: "ไม่สามารถบันทึกเวลาได้" });
       }
     }
   };
 
-  // ----------------------------------------------------
-  // การประมวลผลแท็บ และ การจัดกลุ่มประวัติ (Group By Date)
-  // ----------------------------------------------------
+  // กดยืนยันว่าออกจากป้าย (และสั่งเช็ค No-Show)
+  const handleDepartAtStop = async (logCode, stopName) => {
+    const confirm = await Swal.fire({
+      title: `ออกรถจาก ${stopName}?`,
+      text: "ผู้โดยสารที่ยังไม่สแกนตั๋วจะถูกปรับเป็น No Show ทันที",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "ยืนยันออกรถ",
+      cancelButtonText: "ยกเลิก",
+      confirmButtonColor: '#f59e0b'
+    });
+
+    if (confirm.isConfirmed) {
+      try {
+        await axios.put(`${API_URL}/driver/trip-logs/${logCode}/depart`);
+        await fetchTripLogs(selectedSchedule); 
+        await fetchPassengers(selectedSchedule); // รีเฟรชดูคนที่โดน No Show
+        if (user && user.user_code) await fetchSchedules(user.user_code);
+      } catch (error) {
+        Swal.fire({ icon: "error", title: "เกิดข้อผิดพลาด", text: "ไม่สามารถบันทึกเวลาได้" });
+      }
+    }
+  };
+
   const activeSchedules = schedules.filter(s => s.status !== 'COMPLETED');
   const historySchedules = schedules.filter(s => s.status === 'COMPLETED');
   
   const activeScheduleObj = schedules.find(s => s.schedule_code === selectedSchedule);
-  const nextStop = tripLogs.find(log => log.actual_time === null);
+  
+  // หาป้ายปัจจุบัน (ป้ายที่ยังไม่ได้ Depart)
+  const currentStop = tripLogs.find(log => log.depart_time === null);
   const isScheduleFinished = activeScheduleObj?.status === 'COMPLETED';
 
-  // แปลงวันที่เป็นภาษาไทย
   const formatThaiDate = (dateString) => {
     if (!dateString) return 'ไม่ระบุวันที่';
     const date = new Date(dateString);
     return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
   };
 
-  // Group ข้อมูลประวัติการเดินรถตามวัน
   const groupedHistory = historySchedules.reduce((groups, sch) => {
     const date = sch.travel_date || 'ไม่ระบุวันที่';
     if (!groups[date]) groups[date] = [];
@@ -179,7 +199,6 @@ function Driver() {
     return groups;
   }, {});
 
-  // เรียงลำดับวันล่าสุดขึ้นก่อน
   const sortedHistoryDates = Object.keys(groupedHistory).sort((a, b) => {
     if (a === 'ไม่ระบุวันที่') return 1;
     if (b === 'ไม่ระบุวันที่') return -1;
@@ -206,21 +225,14 @@ function Driver() {
               </h2>
 
               <div className="driver-tabs">
-                <button 
-                  className={`driver-tab-btn ${scheduleTab === 'active' ? 'is-active' : ''}`}
-                  onClick={() => setScheduleTab('active')}
-                >
+                <button className={`driver-tab-btn ${scheduleTab === 'active' ? 'is-active' : ''}`} onClick={() => setScheduleTab('active')}>
                   รอรับส่ง ({activeSchedules.length})
                 </button>
-                <button 
-                  className={`driver-tab-btn ${scheduleTab === 'history' ? 'is-active' : ''}`}
-                  onClick={() => setScheduleTab('history')}
-                >
+                <button className={`driver-tab-btn ${scheduleTab === 'history' ? 'is-active' : ''}`} onClick={() => setScheduleTab('history')}>
                   ประวัติ ({historySchedules.length})
                 </button>
               </div>
 
-              {/* แท็บ: รอรับส่ง (Active) */}
               {scheduleTab === 'active' && (
                 activeSchedules.length === 0 ? (
                   <div className="text-center py-5 text-muted bg-light rounded-4 border border-dashed">
@@ -230,11 +242,7 @@ function Driver() {
                 ) : (
                   <div className="driver-schedule-list">
                     {activeSchedules.map((sch) => (
-                      <div 
-                        key={sch.schedule_code}
-                        className="driver-schedule-item"
-                        onClick={() => { setSelectedSchedule(sch.schedule_code); setIsChoosingSchedule(false); }}
-                      >
+                      <div key={sch.schedule_code} className="driver-schedule-item" onClick={() => { setSelectedSchedule(sch.schedule_code); setIsChoosingSchedule(false); }}>
                         <div className="d-flex justify-content-between align-items-center mb-1">
                           <span className="driver-schedule-time">{sch.start_time} น.</span>
                           <span className={`driver-schedule-state ${selectedSchedule === sch.schedule_code ? 'is-active' : ''}`}>
@@ -248,7 +256,6 @@ function Driver() {
                 )
               )}
 
-              {/* แท็บ: ประวัติการเดินรถ (History - Group By Date) */}
               {scheduleTab === 'history' && (
                 historySchedules.length === 0 ? (
                   <div className="text-center py-5 text-muted bg-light rounded-4 border border-dashed">
@@ -264,11 +271,7 @@ function Driver() {
                         </h6>
                         <div className="d-flex flex-column gap-2">
                           {groupedHistory[date].map((sch) => (
-                            <div 
-                              key={sch.schedule_code}
-                              className="driver-schedule-item opacity-75"
-                              onClick={() => { setSelectedSchedule(sch.schedule_code); setIsChoosingSchedule(false); }}
-                            >
+                            <div key={sch.schedule_code} className="driver-schedule-item opacity-75" onClick={() => { setSelectedSchedule(sch.schedule_code); setIsChoosingSchedule(false); }}>
                               <div className="d-flex justify-content-between align-items-center mb-1">
                                 <span className="driver-schedule-time text-secondary">{sch.start_time} น.</span>
                                 <span className="driver-schedule-state is-completed">สิ้นสุดการเดินรถ</span>
@@ -285,9 +288,6 @@ function Driver() {
             </div>
           ) : (
             
-          /* ======================================
-              ส่วนพื้นที่ทำงาน (Working Panel)
-          ====================================== */
             <div className="animate-fade-in">
               <div className={`driver-panel-card py-3 px-3 d-flex justify-content-between align-items-center mb-3 border-start border-4 ${isScheduleFinished ? 'border-success' : 'border-danger'}`}>
                 <div>
@@ -306,17 +306,28 @@ function Driver() {
                 <div className="driver-stop-list">
                   {tripLogs.map((log, index) => {
                     const isArrived = log.actual_time !== null;
-                    const isNext = nextStop && nextStop.log_code === log.log_code;
+                    const isDeparted = log.depart_time !== null;
+                    const isCurrent = currentStop && currentStop.log_code === log.log_code;
+                    
                     return (
-                      <div key={log.log_code} className={`driver-stop-row ${isNext ? 'is-next' : ''}`}>
+                      <div key={log.log_code} className={`driver-stop-row ${isCurrent ? 'is-next' : ''}`}>
                         <div className={`driver-stop-info ${isArrived ? 'is-arrived' : ''}`}>
                           <div className={`driver-stop-marker ${isArrived ? 'is-arrived' : ''}`}>
-                            {isArrived ? <Check size={14} /> : isNext ? <Bus size={14} /> : index + 1}
+                            {isDeparted ? <Check size={14} /> : isCurrent ? <Bus size={14} /> : index + 1}
                           </div>
                           <div>
-                            <h3>{log.stop_name}</h3>
+                            <h3 className={isCurrent ? 'text-danger fw-bold' : ''}>{log.stop_name}</h3>
+                            
                             {!isArrived && (
                               <span className="driver-eta-text"><Clock size={12} /> {log.expected_time}</span>
+                            )}
+                            
+                            {/* แสดงสถานะป้ายปัจจุบัน */}
+                            {isArrived && !isDeparted && (
+                              <span className="badge bg-warning text-dark mt-1 px-2 d-inline-block">กำลังจอดรับผู้โดยสาร...</span>
+                            )}
+                            {isDeparted && (
+                              <span className="text-muted small mt-1 d-inline-block">ออกรถแล้ว: {log.depart_time} น.</span>
                             )}
                           </div>
                         </div>
@@ -325,12 +336,18 @@ function Driver() {
                   })}
                 </div>
 
-                {!isScheduleFinished && nextStop ? (
-                  <button className="driver-arrive-btn shadow-sm" onClick={() => handleArriveAtStop(nextStop.log_code, nextStop.stop_name)}>
-                    <Navigation size={18} className="me-2" /> ยืนยันถึง: {nextStop.stop_name}
-                  </button>
+                {!isScheduleFinished && currentStop ? (
+                  currentStop.actual_time === null ? (
+                    <button className="driver-arrive-btn shadow-sm mt-4" onClick={() => handleArriveAtStop(currentStop.log_code, currentStop.stop_name)}>
+                      <Navigation size={18} className="me-2" /> ยืนยันถึงป้าย: {currentStop.stop_name}
+                    </button>
+                  ) : (
+                    <button className="btn w-100 py-3 rounded-4 fw-bold shadow-sm text-white fs-6 mt-4" style={{ backgroundColor: '#f59e0b' }} onClick={() => handleDepartAtStop(currentStop.log_code, currentStop.stop_name)}>
+                      <Navigation size={18} className="me-2" /> ยืนยันออกรถจาก: {currentStop.stop_name}
+                    </button>
+                  )
                 ) : (
-                  <div className="text-center fw-bold text-success bg-success bg-opacity-10 p-3 rounded-3 mt-3">
+                  <div className="text-center fw-bold text-success bg-success bg-opacity-10 p-3 rounded-3 mt-4">
                     <CheckCircle2 size={20} className="me-2 mb-1" /> สิ้นสุดการเดินรถ
                   </div>
                 )}
@@ -365,8 +382,8 @@ function Driver() {
                                 <button className="driver-noshow-btn" onClick={() => handleUpdateStatus(p.booking_code, 'NO_SHOW')}><UserX size={14} /></button>
                               </>
                             ) : (
-                              <span className={`driver-status ${p.status === 'COMPLETED' ? 'driver-status-complete' : 'bg-light text-muted'}`}>
-                                {p.status === 'COMPLETED' ? 'เช็คอินแล้ว' : 'ไม่มา'}
+                              <span className={`driver-status ${p.status === 'COMPLETED' ? 'driver-status-complete' : (p.status === 'NO_SHOW' ? 'bg-secondary text-white' : 'bg-light text-muted')}`}>
+                                {p.status === 'COMPLETED' ? 'เช็คอินแล้ว' : (p.status === 'NO_SHOW' ? 'ไม่มา' : 'ยกเลิก')}
                               </span>
                             )}
                           </div>
