@@ -522,13 +522,21 @@ const Booking = () => {
                 </div>
               )}
 
-              {/* --- HISTORY TAB --- */}
+             {/* --- HISTORY TAB --- */}
               {activeTab === 'history' && (
                 <div className="animate-fade-in">
                   
                   <div className="d-flex gap-2 overflow-auto pb-3 mb-4 hide-scrollbar" style={{ whiteSpace: 'nowrap' }}>
-                    {['ACTIVE', 'COMPLETED', 'NO_SHOW', 'CANCELLED', 'ALL'].map(status => {
-                      const labels = { ACTIVE: 'กำลังจะเดินทาง', COMPLETED: 'เดินทางแล้ว', NO_SHOW: 'ไม่มาแสดงตัว', CANCELLED: 'ยกเลิก', ALL: 'ทั้งหมด' };
+                    {/* [อัปเดต] เพิ่ม ONGOING และเปลี่ยนชื่อ ACTIVE เป็น กำลังขึ้นรถ */}
+                    {['ACTIVE', 'ONGOING', 'COMPLETED', 'NO_SHOW', 'CANCELLED', 'ALL'].map(status => {
+                      const labels = { 
+                        ACTIVE: 'กำลังขึ้นรถ', 
+                        ONGOING: 'กำลังเดินทาง', 
+                        COMPLETED: 'เดินทางแล้ว', 
+                        NO_SHOW: 'ไม่มาแสดงตัว', 
+                        CANCELLED: 'ยกเลิก', 
+                        ALL: 'ทั้งหมด' 
+                      };
                       const isActive = historyFilter === status;
                       return (
                         <button key={status} onClick={() => setHistoryFilter(status)} className={`btn rounded-pill px-4 py-2 small fw-bold border-0 interactive-card ${isActive ? 'text-white shadow-sm' : 'bg-light text-secondary border'}`} style={{ backgroundColor: isActive ? mutRed : '' }}>
@@ -552,8 +560,11 @@ const Booking = () => {
                               <CalendarDays size={18} className="text-secondary me-2" />
                               <span className="fw-bold text-dark fs-6">วันที่เดินทาง: {formatThaiDate(item.travel_date)}</span>
                             </div>
-                            {item.status === 'ACTIVE' && <span className="badge bg-warning text-dark px-3 py-2 rounded-pill d-flex align-items-center"><Clock size={12} className="me-1"/> รอเดินทาง</span>}
-                            {item.status === 'COMPLETED' && <span className="badge bg-success text-white px-3 py-2 rounded-pill d-flex align-items-center"><CheckCircle2 size={12} className="me-1"/> สำเร็จ</span>}
+                            
+                            {/* [อัปเดต] ป้ายสถานะ เปลี่ยนให้ตรงตามแท็บที่แก้ใหม่ */}
+                            {item.status === 'ACTIVE' && <span className="badge bg-warning text-dark px-3 py-2 rounded-pill d-flex align-items-center"><Clock size={12} className="me-1"/> กำลังขึ้นรถ</span>}
+                            {item.status === 'ONGOING' && <span className="badge bg-info text-white px-3 py-2 rounded-pill d-flex align-items-center"><Navigation size={12} className="me-1"/> กำลังเดินทาง</span>}
+                            {item.status === 'COMPLETED' && <span className="badge bg-success text-white px-3 py-2 rounded-pill d-flex align-items-center"><CheckCircle2 size={12} className="me-1"/> เดินทางแล้ว</span>}
                             {item.status === 'CANCELLED' && <span className="badge bg-danger text-white px-3 py-2 rounded-pill d-flex align-items-center"><XCircle size={12} className="me-1"/> ยกเลิก</span>}
                             {item.status === 'NO_SHOW' && <span className="badge bg-secondary text-white px-3 py-2 rounded-pill d-flex align-items-center"><UserX size={12} className="me-1"/> ไม่มาแสดงตัว</span>}
                           </div>
@@ -582,8 +593,6 @@ const Booking = () => {
 
                             {item.status === 'ACTIVE' && (
                               <div className="mt-4 pt-4 border-top d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
-                                
-                                {/* ปรับปรุงส่วน QR Code ให้กดขยายได้ */}
                                 <div 
                                   className="d-flex align-items-center cursor-pointer p-2 rounded-4 interactive-card" 
                                   onClick={() => setSelectedQRCode(item)} 

@@ -761,9 +761,8 @@ app.post('/api/bookings/create', async (req, res) => {
     } finally {
         if (connection) await connection.close();
     }
-});
-// ==========================================
-// API: ดึงประวัติการจองของผู้ใช้งาน
+});// ==========================================
+// API: ดึงประวัติการจองของผู้ใช้งาน (เพิ่มเช็คสถานะ ONGOING)
 // ==========================================
 app.get('/api/user/bookings/:userCode', async (req, res) => {
   let connection;
@@ -771,26 +770,21 @@ app.get('/api/user/bookings/:userCode', async (req, res) => {
     const { userCode } = req.params;
     connection = await getConnection();
 
-    // 1. [เพิ่มใหม่] กวาดล้างที่นั่งก่อนส่งตั๋วไปให้หน้าเว็บแสดงผล
     await connection.execute(`
       UPDATE bookings
       SET status = 'NO_SHOW'
       WHERE status = 'ACTIVE' AND pickup_log_code IN (
-          SELECT pickup.log_code
-          FROM trip_logs pickup
-          JOIN trip_logs next_stop ON pickup.schedule_code = next_stop.schedule_code
-          WHERE next_stop.expected_timestamp > pickup.expected_timestamp
-            AND next_stop.actual_timestamp IS NOT NULL
-          UNION
-          SELECT tl.log_code
-          FROM trip_logs tl
-          JOIN schedules s ON tl.schedule_code = s.schedule_code
-          WHERE s.status = 'COMPLETED'
+          SELECT log_code FROM trip_logs WHERE depart_timestamp IS NOT NULL
+          UNION SELECT tl.log_code FROM trip_logs tl JOIN schedules s ON tl.schedule_code = s.schedule_code WHERE s.status = 'COMPLETED'
       )
     `, [], { autoCommit: true });
 
+    // ดึงข้อมูลตั๋ว พร้อมพ่วงสถานะของรถ (s.status) มาเช็คด้วย
     const query = `
-      SELECT b.booking_code, TO_CHAR(b.travel_date, 'YYYY-MM-DD') as travel_date, b.passenger_count, b.status, b.qr_code, s.start_time, r.route_name, sp.stop_name as pickup_name, sd.stop_name as dropoff_name
+      SELECT b.booking_code, TO_CHAR(b.travel_date, 'YYYY-MM-DD') as travel_date, 
+             b.passenger_count, b.status, b.qr_code, s.start_time, r.route_name, 
+             sp.stop_name as pickup_name, sd.stop_name as dropoff_name, 
+             NVL(s.status, 'ACTIVE') as schedule_status
       FROM bookings b 
       JOIN trip_logs tp ON b.pickup_log_code = tp.log_code 
       JOIN stations sp ON tp.stop_code = sp.stop_code 
@@ -801,13 +795,29 @@ app.get('/api/user/bookings/:userCode', async (req, res) => {
       WHERE b.user_code = :userCode ORDER BY b.booking_timestamp DESC
     `;
     const result = await connection.execute(query, { userCode });
-    res.json(result.rows.map(row => ({ booking_code: row[0], travel_date: row[1], passenger_count: row[2], status: row[3], qr_code: row[4], start_time: row[5], route_name: row[6], pickup_name: row[7], dropoff_name: row[8] })));
+    
+    res.json(result.rows.map(row => {
+      let derivedStatus = row[3]; // สถานะของตั๋ว
+      const scheduleStatus = row[9]; // สถานะของรถ
+      
+      // ทริค: ถ้าคนขับสแกนตั๋วให้แล้ว (COMPLETED) แต่รถยังวิ่งไม่จบ (ACTIVE) ให้เปลี่ยนป้ายเป็น "ONGOING"
+      if (derivedStatus === 'COMPLETED' && scheduleStatus !== 'COMPLETED') {
+        derivedStatus = 'ONGOING';
+      }
+
+      return { 
+        booking_code: row[0], travel_date: row[1], passenger_count: row[2], 
+        status: derivedStatus, qr_code: row[4], start_time: row[5], 
+        route_name: row[6], pickup_name: row[7], dropoff_name: row[8] 
+      };
+    }));
   } catch (error) {
     res.status(500).json({ message: "Error fetching user bookings", error: error.message });
   } finally {
     if (connection) await connection.close();
   }
 });
+
 app.put('/api/bookings/:bookingCode/cancel', async (req, res) => {
   let connection;
   try {
