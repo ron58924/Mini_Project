@@ -6,10 +6,9 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import "./Driver.css";
 import Navbar from "./Navbar";
 import { useAuth } from "./context/AuthContext"; 
-
 import { 
   Calendar, MapPin, Bus, CheckCircle2, QrCode, Users, ChevronDown, 
-  X, Clock, Navigation, Check, UserX, RefreshCw, History
+  X, Clock, Navigation, Check, UserX, RefreshCw, History, Upload 
 } from "lucide-react";
 
 const API_URL = "http://localhost:5000/api";
@@ -30,7 +29,7 @@ function Driver() {
   const html5QrCodeRef = useRef(null);
   const { user } = useAuth(); 
   const mutRed = '#c8102e';
-
+const [manualCode, setManualCode] = useState("");
   useEffect(() => {
     if (user && user.user_code) {
       fetchSchedules(user.user_code);
@@ -59,16 +58,19 @@ function Driver() {
           html5QrCodeRef.current = new Html5Qrcode(qrCodeId);
         }
         currentScanner = html5QrCodeRef.current;
+        
+        // [แก้ไขใหม่] ตั้งค่าให้บังคับเปิดกล้องหน้า (Webcam) สำหรับโน้ตบุ๊ก
         currentScanner.start(
-          { facingMode: "environment" }, 
-          { fps: 10, qrbox: { width: 250, height: 250 } },
+          { facingMode: "user" }, // เปลี่ยนเป็น "user" เพื่อเรียกใช้งาน Webcam
+          { fps: 15, qrbox: { width: 250, height: 250 } },
           (decodedText) => { handleScanSuccess(decodedText, currentScanner); },
-          (errorMessage) => {}
+          (errorMessage) => { /* ปล่อยว่างไว้เพื่อไม่ให้แจ้งเตือนรก Console */ }
         ).catch((err) => {
-          Swal.fire({ icon: "error", title: "ไม่สามารถเปิดกล้องได้", text: "กรุณาอนุญาตการใช้งานกล้องบนมือถือ" });
+          console.error("Camera error:", err);
+          Swal.fire({ icon: "error", title: "เปิดกล้องไม่สำเร็จ", text: "กรุณาใช้ช่องกรอกรหัสด้านล่างแทนครับ" });
           setIsScanning(false);
         });
-      }, 100);
+      }, 300); // เพิ่มเวลาหน่วงนิดหน่อย ป้องกันกล้องค้างตอนโหลด
       return () => clearTimeout(timer);
     } else {
       if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
@@ -79,7 +81,6 @@ function Driver() {
       }
     }
   }, [isScanning, passengers]);
-
   const fetchSchedules = async (driverCode) => {
     try {
       const response = await axios.get(`${API_URL}/driver/schedules`, { params: { driver_code: driverCode } });
@@ -130,7 +131,35 @@ function Driver() {
       Swal.fire({ icon: "error", title: "ไม่พบข้อมูลตั๋ว", text: `QR Code ไม่ตรงกับรอบรถนี้` });
     }
   };
+ // [แก้ไขใหม่] ฟังก์ชันอ่าน QR Code จากรูปภาพ (ต้องปิดกล้องก่อนอ่านไฟล์)
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
 
+    if (html5QrCodeRef.current) {
+      try {
+        // เช็คว่าถ้ากล้องกำลังเปิดอยู่ ให้สั่งปิดกล้องก่อน
+        if (html5QrCodeRef.current.isScanning) {
+          await html5QrCodeRef.current.stop();
+        }
+        
+        // เมื่อกล้องปิดแล้ว ค่อยสั่งให้อ่าน QR Code จากรูปภาพ
+        const decodedText = await html5QrCodeRef.current.scanFile(file, true);
+        handleScanSuccess(decodedText, html5QrCodeRef.current);
+        
+      } catch (err) {
+        console.error("Error scanning file:", err);
+        Swal.fire({
+          icon: "error",
+          title: "สแกนไม่สำเร็จ",
+          text: "ระบบไม่พบ QR Code ในรูปภาพนี้ หรือภาพอาจไม่ชัดเจนครับ",
+        });
+        
+        // ถ้าอ่านไฟล์พัง ให้ปิดหน้าต่างสแกนไปเลยเพื่อรีเซ็ตสถานะ
+        setIsScanning(false);
+      }
+    }
+  };
   // กดยืนยันว่าถึงป้าย
   const handleArriveAtStop = async (logCode, stopName) => {
     const confirm = await Swal.fire({
@@ -488,9 +517,54 @@ function Driver() {
             <h2>สแกนตั๋วผู้โดยสาร</h2>
             <button className="driver-close-scan" onClick={() => setIsScanning(false)}><X size={24} /></button>
           </div>
+          
           <div id="real-qr-reader" className="driver-qr-reader"></div>
+          
           <div className="text-center text-white p-4 pb-5 w-100" style={{ background: 'rgba(0,0,0,0.8)' }}>
-            <p className="mb-0">กรุณาหันกล้องให้เห็น QR Code ชัดเจน<br/>ระบบจะเช็คอินให้อัตโนมัติ</p>
+            <p className="mb-3 small">หันกล้องให้เห็น QR Code หรืออัปโหลดรูปภาพสลิปตั๋ว</p>
+            
+            <div className="d-flex flex-column gap-3 justify-content-center mx-auto" style={{ maxWidth: '300px' }}>
+              
+              {/* 1. ปุ่มอัปโหลดรูปภาพ */}
+              <div className="w-100">
+                <input 
+                  type="file" 
+                  id="qr-upload" 
+                  accept="image/*" 
+                  className="d-none" 
+                  onChange={handleImageUpload} 
+                />
+                <label htmlFor="qr-upload" className="btn btn-outline-light w-100 fw-bold d-flex align-items-center justify-content-center py-2" style={{ cursor: 'pointer' }}>
+                  <Upload size={18} className="me-2" /> เลือกรูป QR Code ในเครื่อง
+                </label>
+              </div>
+
+              <div className="text-white-50 small" style={{ fontSize: '11px' }}>- หรือกรอกรหัสด้วยมือ -</div>
+
+              {/* 2. ช่องกรอกรหัสตั๋วด้วยมือ */}
+              <div className="d-flex gap-2">
+                <input 
+                  type="text" 
+                  className="form-control text-center fw-bold" 
+                  placeholder="เช่น BK12345678" 
+                  value={manualCode}
+                  onChange={(e) => setManualCode(e.target.value)}
+                  style={{ textTransform: 'uppercase' }}
+                />
+                <button 
+                  className="btn text-white fw-bold px-3" 
+                  style={{ backgroundColor: mutRed, whiteSpace: 'nowrap' }}
+                  onClick={() => {
+                    if(!manualCode) return;
+                    handleScanSuccess(manualCode.toUpperCase(), html5QrCodeRef.current);
+                    setManualCode(""); 
+                  }}
+                >
+                  ยืนยัน
+                </button>
+              </div>
+
+            </div>
           </div>
         </div>
       )}
