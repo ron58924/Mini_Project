@@ -105,19 +105,26 @@ app.post("/api/login", async (req, res) => {
 });
 
 // =====================================================
-// GENERATE USER ID (แยก EMP และ PAS)
+// GENERATE USER ID (แก้บัค PASNaN ให้ใช้ได้ทั้งหน้า Register และ Admin)
 // =====================================================
 async function generateUserCode(connection, roleCode) {
-  const prefix = (roleCode === 'R03') ? 'PAS' : 'EMP';
+  // รองรับการส่งค่า role_code เป็น 'PAS' (จากหน้า Register) หรือ 'R03' (จากฐานข้อมูล)
+  const prefix = (roleCode === 'R03' || roleCode === 'PAS') ? 'PAS' : 'EMP';
+  
   const result = await connection.execute(
     `SELECT MAX(user_code) AS MAXID FROM users WHERE user_code LIKE '${prefix}%'`
   );
+  
   let runningNumber = 1;
   if (result.rows[0][0]) {
     const maxId = result.rows[0][0]; 
-    const lastNumber = parseInt(maxId.substring(3), 10); 
-    runningNumber = lastNumber + 1;
+    // ใช้ replace เอาตัวอักษรออกให้เหลือแต่ตัวเลข แล้วแปลงเป็น Int
+    const lastNumber = parseInt(maxId.replace(prefix, ''), 10); 
+    if (!isNaN(lastNumber)) {
+      runningNumber = lastNumber + 1;
+    }
   }
+  
   return `${prefix}${String(runningNumber).padStart(3, "0")}`;
 }
 
