@@ -572,7 +572,7 @@ app.get('/api/stations', async (req, res) => {
   }
 });
 // ==========================================
-// API: ค้นหารอบรถแบบ Smart Search
+// API: ค้นหารอบรถแบบ Smart Search (แก้บั๊กคำนวณที่นั่งแบบ 100%)
 // ==========================================
 app.get('/api/booking/search', async (req, res) => {
   const { pickup_code, dropoff_code, travel_date } = req.query;
@@ -580,71 +580,78 @@ app.get('/api/booking/search', async (req, res) => {
   try {
     connection = await getConnection();
 
-    // 1. [เพิ่มใหม่] กวาดล้างที่นั่ง (Auto No-Show) และคืนที่นั่งก่อนคนอื่นค้นหา
+    // 1. กวาดล้างที่นั่งก่อนการค้นหา (Auto No-Show ตัดจาก DEPART_TIMESTAMP)
     await connection.execute(`
       UPDATE bookings
       SET status = 'NO_SHOW'
       WHERE status = 'ACTIVE' AND pickup_log_code IN (
-          SELECT pickup.log_code
-          FROM trip_logs pickup
-          JOIN trip_logs next_stop ON pickup.schedule_code = next_stop.schedule_code
-          WHERE next_stop.expected_timestamp > pickup.expected_timestamp
-            AND next_stop.actual_timestamp IS NOT NULL
-          UNION
-          SELECT tl.log_code
-          FROM trip_logs tl
-          JOIN schedules s ON tl.schedule_code = s.schedule_code
-          WHERE s.status = 'COMPLETED'
+          SELECT log_code FROM trip_logs WHERE depart_timestamp IS NOT NULL
+          UNION SELECT tl.log_code FROM trip_logs tl JOIN schedules s ON tl.schedule_code = s.schedule_code WHERE s.status = 'COMPLETED'
       )
     `, [], { autoCommit: true });
 
-    // 2. ดึงข้อมูลรอบรถ
+    // 2. ใช้ WITH Clause คำนวณการทับซ้อนของที่นั่ง (หักลบคนที่อยู่บนรถตามสถานีได้อย่างแม่นยำ)
     const query = `
       WITH OrderedLogs AS (
-          SELECT log_code, schedule_code, stop_code, expected_timestamp,
-                 ROW_NUMBER() OVER (PARTITION BY schedule_code ORDER BY expected_timestamp ASC) as stop_order
-          FROM trip_logs
+          SELECT t.log_code, t.schedule_code, t.stop_code, t.expected_timestamp, 
+                 ROW_NUMBER() OVER (PARTITION BY t.schedule_code ORDER BY t.expected_timestamp ASC) as stop_order
+          FROM trip_logs t
+          JOIN schedules s ON t.schedule_code = s.schedule_code
+          WHERE s.travel_date = TO_DATE(:travel_date, 'YYYY-MM-DD')
       ),
       MatchingSchedules AS (
           SELECT p.schedule_code, p.log_code as pickup_log_code, p.stop_order as pickup_order, p.expected_timestamp as pickup_time,
                  d.log_code as dropoff_log_code, d.stop_order as dropoff_order, d.expected_timestamp as dropoff_time
-          FROM OrderedLogs p
-          JOIN OrderedLogs d ON p.schedule_code = d.schedule_code
+          FROM OrderedLogs p 
+          JOIN OrderedLogs d ON p.schedule_code = d.schedule_code 
           JOIN schedules sch ON p.schedule_code = sch.schedule_code
-          WHERE p.stop_code = :pickup_code 
-            AND d.stop_code = :dropoff_code 
-            AND p.stop_order < d.stop_order 
-            AND TRUNC(p.expected_timestamp) = TO_DATE(:travel_date, 'YYYY-MM-DD')
+          WHERE p.stop_code = :pickup_code AND d.stop_code = :dropoff_code AND p.stop_order < d.stop_order 
             AND p.expected_timestamp > (SYSTIMESTAMP + INTERVAL '20' MINUTE)
-            AND NVL(sch.status, 'ACTIVE') != 'COMPLETED' -- แก้ปัญหาข้อ 5: กรองรอบรถที่ COMPLETED ทิ้ง
+            AND NVL(sch.status, 'ACTIVE') != 'COMPLETED'
       ),
       BookingOrders AS (
           SELECT b.booking_code, b.passenger_count, p.schedule_code, p.stop_order as p_order, d.stop_order as d_order
-          FROM bookings b
-          JOIN OrderedLogs p ON b.pickup_log_code = p.log_code
+          FROM bookings b 
+          JOIN OrderedLogs p ON b.pickup_log_code = p.log_code 
           JOIN OrderedLogs d ON b.dropoff_log_code = d.log_code
           WHERE b.status IN ('ACTIVE', 'COMPLETED') 
-            AND TRUNC(b.travel_date) = TO_DATE(:travel_date, 'YYYY-MM-DD')
+            AND b.travel_date = TO_DATE(:travel_date, 'YYYY-MM-DD')
       ),
-      ScheduleUsage AS (
-          SELECT ms.schedule_code, ms.pickup_time, ms.dropoff_time, ms.pickup_order, ms.dropoff_order, 
-                 s.start_time, r.route_code, r.route_name, v.capacity,
-              NVL((SELECT MAX(passengers_on_board) FROM (SELECT segments.check_order, NVL(SUM(bo.passenger_count), 0) as passengers_on_board FROM (SELECT ms.pickup_order + LEVEL - 1 AS check_order FROM DUAL CONNECT BY LEVEL <= (ms.dropoff_order - ms.pickup_order)) segments LEFT JOIN BookingOrders bo ON bo.schedule_code = ms.schedule_code AND bo.p_order <= segments.check_order AND bo.d_order > segments.check_order GROUP BY segments.check_order)), 0) AS max_used_seats
+      SeatUsagePerStop AS (
+          SELECT tl.schedule_code, tl.stop_order, NVL(SUM(bo.passenger_count), 0) as used_seats
+          FROM OrderedLogs tl
+          LEFT JOIN BookingOrders bo 
+                 ON bo.schedule_code = tl.schedule_code 
+                AND bo.p_order <= tl.stop_order 
+                AND bo.d_order > tl.stop_order
+          GROUP BY tl.schedule_code, tl.stop_order
+      ),
+      MaxSeatUsagePerSegment AS (
+          SELECT ms.schedule_code, ms.pickup_order, ms.dropoff_order, NVL(MAX(su.used_seats), 0) as max_used_seats
           FROM MatchingSchedules ms
-          JOIN schedules s ON ms.schedule_code = s.schedule_code
-          JOIN routes r ON s.route_code = r.route_code
-          JOIN vehicles v ON s.vehicle_code = v.vehicle_code
+          JOIN SeatUsagePerStop su 
+            ON su.schedule_code = ms.schedule_code 
+           AND su.stop_order >= ms.pickup_order 
+           AND su.stop_order < ms.dropoff_order
+          GROUP BY ms.schedule_code, ms.pickup_order, ms.dropoff_order
       )
-      SELECT 
-          schedule_code, route_code, route_name, 
-          TO_CHAR(pickup_time, 'HH24:MI') as expected_pickup_time, 
-          TO_CHAR(dropoff_time, 'HH24:MI') as expected_dropoff_time, 
-          capacity, max_used_seats, 
-          (capacity - max_used_seats) AS available_seats, 
-          pickup_order, dropoff_order 
-      FROM ScheduleUsage 
-      ORDER BY pickup_time ASC
+      SELECT ms.schedule_code, r.route_code, r.route_name, 
+             TO_CHAR(ms.pickup_time, 'HH24:MI') as expected_pickup_time, 
+             TO_CHAR(ms.dropoff_time, 'HH24:MI') as expected_dropoff_time, 
+             v.capacity, mus.max_used_seats, 
+             (v.capacity - mus.max_used_seats) AS available_seats, 
+             ms.pickup_order, ms.dropoff_order 
+      FROM MatchingSchedules ms 
+      JOIN schedules s ON ms.schedule_code = s.schedule_code 
+      JOIN routes r ON s.route_code = r.route_code 
+      JOIN vehicles v ON s.vehicle_code = v.vehicle_code
+      JOIN MaxSeatUsagePerSegment mus 
+        ON mus.schedule_code = ms.schedule_code 
+       AND mus.pickup_order = ms.pickup_order 
+       AND mus.dropoff_order = ms.dropoff_order
+      ORDER BY ms.pickup_time ASC
     `;
+    
     const result = await connection.execute(query, { pickup_code, dropoff_code, travel_date });
     
     res.json(result.rows.map(row => ({
@@ -654,11 +661,13 @@ app.get('/api/booking/search', async (req, res) => {
       pickup_order: row[8], dropoff_order: row[9]
     })));
   } catch (error) {
+    console.error("Search Error:", error);
     res.status(500).json({ message: "Error searching schedules", error: error.message });
   } finally {
     if (connection) await connection.close();
   }
 });
+
 // ==========================================
 // API: บันทึกการจอง (รองรับจองล่วงหน้า)
 // ==========================================
