@@ -85,7 +85,7 @@ app.post("/api/login", async (req, res) => {
 });
 
 // =====================================================
-// GENERATE USER ID (แก้บัค PASNaN ให้ใช้ได้ทั้งหน้า Register และ Admin)
+// GENERATE USER ID
 // =====================================================
 async function generateUserCode(connection, roleCode) {
   const prefix = (roleCode === 'R03' || roleCode === 'PAS') ? 'PAS' : 'EMP';
@@ -405,7 +405,7 @@ app.put("/api/role-permissions/:roleCode", async (req, res) => {
 });
 
 // ==========================================
-// DRIVER PANEL
+// DRIVER PANEL (อัปเดตรองรับ Master-Detail)
 // ==========================================
 app.get("/api/driver/schedules", async (req, res) => {
   const { driver_code } = req.query;
@@ -415,7 +415,7 @@ app.get("/api/driver/schedules", async (req, res) => {
     const query = `
       SELECT 
         s.schedule_code, s.start_time, r.route_name, v.capacity,
-        (SELECT NVL(SUM(b.passenger_count), 0) FROM bookings b JOIN trip_logs pickup_log ON b.pickup_log_code = pickup_log.log_code WHERE pickup_log.schedule_code = s.schedule_code AND b.status = 'COMPLETED') AS boarded_count,
+        (SELECT NVL(SUM(bd.passenger_count), 0) FROM booking_details bd JOIN trip_logs pickup_log ON bd.pickup_log_code = pickup_log.log_code WHERE pickup_log.schedule_code = s.schedule_code AND bd.status = 'COMPLETED') AS boarded_count,
         NVL(s.status, 'ACTIVE') AS status,
         (SELECT TO_CHAR(MIN(expected_timestamp), 'YYYY-MM-DD') FROM trip_logs WHERE schedule_code = s.schedule_code) AS travel_date
       FROM schedules s JOIN routes r ON s.route_code = r.route_code JOIN vehicles v ON s.vehicle_code = v.vehicle_code
@@ -431,19 +431,29 @@ app.get("/api/driver/schedules", async (req, res) => {
     if (connection) await connection.close();
   }
 });
-
 app.get("/api/driver/passengers", async (req, res) => {
   const { schedule_code } = req.query;
   let connection;
   try {
     connection = await getConnection();
     const query = `
-      SELECT b.booking_code, u.first_name || ' ' || u.last_name AS passenger_name, sp.stop_name AS pickup_station, sd.stop_name AS dropoff_station, b.status, b.qr_code
-      FROM bookings b JOIN users u ON b.user_code = u.user_code JOIN trip_logs tp ON b.pickup_log_code = tp.log_code JOIN stations sp ON tp.stop_code = sp.stop_code JOIN trip_logs td ON b.dropoff_log_code = td.log_code JOIN stations sd ON td.stop_code = sd.stop_code
+      SELECT bd.detail_code, b.booking_code, u.first_name || ' ' || u.last_name AS passenger_name, 
+             sp.stop_name AS pickup_station, sd.stop_name AS dropoff_station, bd.status, b.qr_code
+      FROM booking_details bd
+      JOIN bookings b ON bd.booking_code = b.booking_code
+      JOIN users u ON b.user_code = u.user_code 
+      JOIN trip_logs tp ON bd.pickup_log_code = tp.log_code 
+      JOIN stations sp ON tp.stop_code = sp.stop_code 
+      JOIN trip_logs td ON bd.dropoff_log_code = td.log_code 
+      JOIN stations sd ON td.stop_code = sd.stop_code
       WHERE tp.schedule_code = :schedule_code ORDER BY tp.expected_timestamp ASC
     `;
     const result = await connection.execute(query, { schedule_code });
-    res.json(result.rows.map(row => ({ booking_code: row[0], passenger_name: row[1], pickup_station: row[2], dropoff_station: row[3], status: row[4], qr_code: row[5] })));
+    
+    res.json(result.rows.map(row => ({ 
+      booking_code: row[0], // [ส่งตัวหลอก] เปลี่ยนไปส่ง detail_code แทน เพื่อให้ระบบคนขับแยกเส้นทางได้ถูกต้อง
+      passenger_name: row[2], pickup_station: row[3], dropoff_station: row[4], status: row[5], qr_code: row[6] 
+    })));
   } catch (error) {
     res.status(500).json({ message: "Error fetching passengers", error: error.message });
   } finally {
@@ -487,7 +497,6 @@ app.put("/api/driver/trip-logs/:log_code/arrive", async (req, res) => {
       const scheduleCode = schRes.rows[0][0];
       const checkNulls = await connection.execute(`SELECT COUNT(*) FROM trip_logs WHERE schedule_code = :1 AND actual_timestamp IS NULL`, [scheduleCode]);
       if (parseInt(checkNulls.rows[0][0]) === 0) {
-        // ถ้าเป็นป้ายสุดท้าย ให้จบงานและเซ็ตเวลาออกรถให้ด้วยเลย
         await connection.execute(`UPDATE schedules SET status = 'COMPLETED' WHERE schedule_code = :1`, [scheduleCode], { autoCommit: false });
         await connection.execute(`UPDATE trip_logs SET depart_timestamp = SYSTIMESTAMP WHERE log_code = :log_code`, { log_code }, { autoCommit: false });
       }
@@ -510,9 +519,9 @@ app.put("/api/driver/trip-logs/:log_code/depart", async (req, res) => {
     
     await connection.execute(`UPDATE trip_logs SET depart_timestamp = SYSTIMESTAMP WHERE log_code = :log_code`, { log_code }, { autoCommit: false });
 
-    // ตัด No-Show ทันที
+    // ตัด No-Show จาก booking_details
     await connection.execute(`
-      UPDATE bookings 
+      UPDATE booking_details 
       SET status = 'NO_SHOW' 
       WHERE status = 'ACTIVE' AND pickup_log_code = :log_code
     `, { log_code }, { autoCommit: false });
@@ -530,24 +539,104 @@ app.put("/api/driver/trip-logs/:log_code/depart", async (req, res) => {
 app.post("/api/driver/check-in", async (req, res) => {
   const { qr_code, schedule_code } = req.body;
   if (!qr_code || !schedule_code) return res.status(400).json({ message: "กรุณาระบุ QR Code และรอบรถ" });
+  
   let connection;
   try {
     connection = await getConnection();
+    
     const result = await connection.execute(
-      `SELECT b.booking_code, u.first_name || ' ' || u.last_name, b.status, tp.schedule_code
-       FROM bookings b JOIN users u ON b.user_code = u.user_code JOIN trip_logs tp ON b.pickup_log_code = tp.log_code
-       WHERE b.qr_code = :qr_code`,
-      { qr_code }
+      `SELECT bd.detail_code, b.booking_code, u.first_name || ' ' || u.last_name, bd.status, tp.schedule_code
+       FROM bookings b 
+       JOIN booking_details bd ON b.booking_code = bd.booking_code
+       JOIN users u ON b.user_code = u.user_code 
+       JOIN trip_logs tp ON bd.pickup_log_code = tp.log_code
+       WHERE b.qr_code = :qr_code AND tp.schedule_code = :schedule_code`,
+      { qr_code, schedule_code }
     );
-    if (result.rows.length === 0) return res.status(404).json({ message: "ไม่พบตั๋ว QR นี้" });
-    const [bookingCode, passengerName, status, bookingSchedule] = result.rows[0];
-    if (bookingSchedule !== schedule_code) return res.status(409).json({ message: "ตั๋วนี้เป็นของรอบรถอื่น" });
-    if (status !== "ACTIVE") return res.status(409).json({ message: "ตั๋วนี้ถูกใช้แล้วหรือถูกยกเลิก" });
+    
+    if (result.rows.length === 0) return res.status(404).json({ message: "ไม่พบตั๋ว QR นี้ในรอบรถปัจจุบัน" });
+    
+    const [detailCode, bookingCode, passengerName, status, bookingSchedule] = result.rows[0];
+    
+    if (status !== "ACTIVE") return res.status(409).json({ message: "ตั๋วในเส้นทางนี้ถูกใช้แล้วหรือถูกยกเลิก" });
 
-    await connection.execute(`UPDATE bookings SET status = 'COMPLETED' WHERE booking_code = :booking_code AND qr_code = :qr_code AND status = 'ACTIVE'`, { booking_code: bookingCode, qr_code }, { autoCommit: true });
+    await connection.execute(
+        `UPDATE booking_details SET status = 'COMPLETED' WHERE detail_code = :detail_code`, 
+        { detail_code: detailCode }, { autoCommit: true }
+    );
+    
     res.json({ booking_code: bookingCode, passenger_name: passengerName, status: "COMPLETED" });
   } catch (error) {
     res.status(500).json({ message: "ไม่สามารถบันทึกการเช็คอินได้", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+// ==========================================
+// API: สรุปยอดผู้โดยสารสำหรับรอบรถนั้นๆ (ก่อนปิดงาน)
+// ==========================================
+app.get('/api/driver/schedules/:schedule_code/summary', async (req, res) => {
+  const { schedule_code } = req.params;
+  let connection;
+  try {
+    connection = await getConnection();
+    const query = `
+      SELECT 
+        NVL(SUM(bd.passenger_count), 0) as total_booked,
+        NVL(SUM(CASE WHEN bd.status = 'COMPLETED' THEN bd.passenger_count ELSE 0 END), 0) as total_boarded,
+        NVL(SUM(CASE WHEN bd.status = 'NO_SHOW' THEN bd.passenger_count ELSE 0 END), 0) as total_no_show,
+        NVL(SUM(CASE WHEN bd.status = 'CANCELLED' THEN bd.passenger_count ELSE 0 END), 0) as total_cancelled,
+        NVL(SUM(CASE WHEN bd.status = 'ACTIVE' THEN bd.passenger_count ELSE 0 END), 0) as total_pending
+      FROM booking_details bd
+      JOIN trip_logs tp ON bd.pickup_log_code = tp.log_code
+      WHERE tp.schedule_code = :schedule_code
+    `;
+    const result = await connection.execute(query, { schedule_code });
+    res.json({
+      total_booked: result.rows[0][0],
+      total_boarded: result.rows[0][1], // คนที่สแกนขึ้นรถแล้ว
+      total_no_show: result.rows[0][2], // คนที่โดนตัดสิทธิ์ไปแล้วตามป้ายต่างๆ
+      total_cancelled: result.rows[0][3],
+      total_pending: result.rows[0][4]  // คนที่ยังค้างอยู่ในระบบ (ถ้ากดปิดงาน คนพวกนี้จะกลายเป็น No-Show ทันที)
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching summary", error: error.message });
+  } finally {
+    if (connection) await connection.close();
+  }
+});
+
+// ==========================================
+// API: กดปิดงาน (จบกะ) เคลียร์คนที่เหลือเป็น No-show
+// ==========================================
+app.put('/api/driver/schedules/:schedule_code/complete', async (req, res) => {
+  const { schedule_code } = req.params;
+  let connection;
+  try {
+    connection = await getConnection();
+    
+    // 1. อัปเดตสถานะรอบรถให้เป็น COMPLETED
+    await connection.execute(
+      `UPDATE schedules SET status = 'COMPLETED' WHERE schedule_code = :schedule_code`,
+      { schedule_code }, { autoCommit: false }
+    );
+
+    // 2. กวาดล้างตั๋วที่ยัง ACTIVE อยู่ในรอบรถนี้ให้เป็น NO_SHOW ทั้งหมด
+    await connection.execute(`
+      UPDATE booking_details bd
+      SET status = 'NO_SHOW'
+      WHERE status = 'ACTIVE' 
+        AND EXISTS (
+          SELECT 1 FROM trip_logs tp 
+          WHERE tp.log_code = bd.pickup_log_code AND tp.schedule_code = :schedule_code
+        )
+    `, { schedule_code }, { autoCommit: false });
+
+    await connection.commit();
+    res.json({ message: "ปิดงานรอบรถนี้เรียบร้อยแล้ว" });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    res.status(500).json({ message: "Error completing schedule", error: error.message });
   } finally {
     if (connection) await connection.close();
   }
@@ -597,7 +686,7 @@ app.get('/api/stations', async (req, res) => {
 });
 
 // ==========================================
-// API: ค้นหารอบรถแบบ Smart Search (แก้ไขบั๊กซ่อนรถที่ขับผ่านไปแล้ว)
+// API: ค้นหารอบรถแบบ Smart Search (อัปเดตให้รองรับ Master-Detail)
 // ==========================================
 app.get('/api/booking/search', async (req, res) => {
   const { pickup_code, dropoff_code, travel_date } = req.query;
@@ -605,9 +694,8 @@ app.get('/api/booking/search', async (req, res) => {
   try {
     connection = await getConnection();
 
-    // 1. กวาดล้างที่นั่งก่อนการค้นหา (Auto No-Show ตัดจาก DEPART_TIMESTAMP)
     await connection.execute(`
-      UPDATE bookings
+      UPDATE booking_details
       SET status = 'NO_SHOW'
       WHERE status = 'ACTIVE' AND pickup_log_code IN (
           SELECT log_code FROM trip_logs WHERE depart_timestamp IS NOT NULL
@@ -615,7 +703,6 @@ app.get('/api/booking/search', async (req, res) => {
       )
     `, [], { autoCommit: true });
 
-    // 2. ใช้ WITH Clause คำนวณการทับซ้อนของที่นั่ง (หักลบคนที่อยู่บนรถตามสถานีได้อย่างแม่นยำ และกรองรถที่ออกไปแล้ว)
     const query = `
       WITH OrderedLogs AS (
           SELECT t.log_code, t.schedule_code, t.stop_code, t.expected_timestamp, t.depart_timestamp, 
@@ -633,15 +720,15 @@ app.get('/api/booking/search', async (req, res) => {
           WHERE p.stop_code = :pickup_code AND d.stop_code = :dropoff_code AND p.stop_order < d.stop_order 
             AND p.expected_timestamp > (SYSTIMESTAMP + INTERVAL '20' MINUTE)
             AND NVL(sch.status, 'ACTIVE') != 'COMPLETED'
-            AND p.depart_timestamp IS NULL -- [🔥 แก้บัคตรงนี้] เช็คว่าคนขับต้องยังไม่กดออกจากป้ายที่เราจะขึ้น
+            AND p.depart_timestamp IS NULL
       ),
       BookingOrders AS (
-          SELECT b.booking_code, b.passenger_count, p.schedule_code, p.stop_order as p_order, d.stop_order as d_order
-          FROM bookings b 
-          JOIN OrderedLogs p ON b.pickup_log_code = p.log_code 
-          JOIN OrderedLogs d ON b.dropoff_log_code = d.log_code
-          WHERE b.status IN ('ACTIVE', 'COMPLETED') 
-            AND b.travel_date = TO_DATE(:travel_date, 'YYYY-MM-DD')
+          SELECT bd.detail_code, bd.passenger_count, p.schedule_code, p.stop_order as p_order, d.stop_order as d_order
+          FROM booking_details bd 
+          JOIN OrderedLogs p ON bd.pickup_log_code = p.log_code 
+          JOIN OrderedLogs d ON bd.dropoff_log_code = d.log_code
+          WHERE bd.status IN ('ACTIVE', 'COMPLETED') 
+            AND bd.travel_date = TO_DATE(:travel_date, 'YYYY-MM-DD')
       ),
       SeatUsagePerStop AS (
           SELECT tl.schedule_code, tl.stop_order, NVL(SUM(bo.passenger_count), 0) as used_seats
@@ -695,17 +782,16 @@ app.get('/api/booking/search', async (req, res) => {
 });
 
 // ==========================================
-// API: บันทึกการจอง (รองรับจองล่วงหน้า)
+// API: บันทึกการจอง (รองรับ Master-Detail)
 // ==========================================
 app.post('/api/bookings/create', async (req, res) => {
-    const { user_code, schedule_code, pickup_order, dropoff_order, passenger_count, travel_date } = req.body;
+    const { user_code, trips } = req.body; 
     let connection;
     try {
         connection = await getConnection();
 
-        // 1. [เพิ่มใหม่] กวาดล้างที่นั่งก่อนเช็คโควต้า
         await connection.execute(`
-          UPDATE bookings
+          UPDATE booking_details
           SET status = 'NO_SHOW'
           WHERE status = 'ACTIVE' AND pickup_log_code IN (
               SELECT pickup.log_code
@@ -722,36 +808,62 @@ app.post('/api/bookings/create', async (req, res) => {
         `, [], { autoCommit: true });
 
         const checkActiveSeats = await connection.execute(
-            `SELECT NVL(SUM(passenger_count), 0) AS total_active FROM bookings WHERE user_code = :user_code AND status = 'ACTIVE'`, { user_code }
+            `SELECT NVL(SUM(bd.passenger_count), 0) AS total_active 
+             FROM booking_details bd 
+             JOIN bookings b ON bd.booking_code = b.booking_code
+             WHERE b.user_code = :user_code AND bd.status = 'ACTIVE'`, { user_code }
         );
         const currentActiveSeats = checkActiveSeats.rows[0][0];
+        
+        const requestedSeats = trips.reduce((sum, item) => sum + parseInt(item.passenger_count), 0);
 
-        if (currentActiveSeats + passenger_count > 4) {
-            return res.status(400).json({ message: `โควต้าเต็ม! คุณมีรายการจองค้างอยู่ ${currentActiveSeats} ที่นั่ง สามารถจองเพิ่มได้อีกแค่ ${4 - currentActiveSeats} ที่นั่งเท่านั้น` });
+        if (currentActiveSeats + requestedSeats > 4) {
+            return res.status(400).json({ message: `โควต้าเต็ม! คุณมีรายการค้างอยู่ ${currentActiveSeats} ที่นั่ง สามารถจองเพิ่มได้อีกแค่ ${4 - currentActiveSeats} ที่นั่งเท่านั้น` });
         }
-
-        const logResult = await connection.execute(
-            `WITH OrderedLogs AS (SELECT log_code, ROW_NUMBER() OVER (ORDER BY expected_timestamp ASC) as stop_order FROM trip_logs WHERE schedule_code = :schedule_code)
-             SELECT log_code, stop_order FROM OrderedLogs WHERE stop_order IN (:pickup, :dropoff)`,
-            { schedule_code, pickup: pickup_order, dropoff: dropoff_order }, { outFormat: oracledb.OUT_FORMAT_OBJECT }
-        );
-
-        const pickupLog = logResult.rows.find(row => row.STOP_ORDER === parseInt(pickup_order));
-        const dropoffLog = logResult.rows.find(row => row.STOP_ORDER === parseInt(dropoff_order));
-        if (!pickupLog || !dropoffLog) return res.status(400).json({ message: 'ไม่พบข้อมูลจุดจอดในรอบการเดินรถนี้' });
 
         const bookingCode = 'BK' + Date.now().toString().slice(-8);
         const qrCode = `QR_${bookingCode}`;
-        const targetDate = travel_date ? travel_date : new Date().toISOString().split('T')[0];
 
         await connection.execute(
-            `INSERT INTO bookings (booking_code, user_code, pickup_log_code, dropoff_log_code, passenger_count, travel_date, booking_timestamp, status, qr_code)
-             VALUES (:booking_code, :user_code, :pickup_log, :dropoff_log, :count, TO_DATE(:travel_date, 'YYYY-MM-DD'), SYSTIMESTAMP, 'ACTIVE', :qr_code)`,
-            { booking_code: bookingCode, user_code: user_code, pickup_log: pickupLog.LOG_CODE, dropoff_log: dropoffLog.LOG_CODE, count: passenger_count, travel_date: targetDate, qr_code: qrCode },
-            { autoCommit: true }
+            `INSERT INTO bookings (booking_code, user_code, booking_timestamp, qr_code)
+             VALUES (:booking_code, :user_code, SYSTIMESTAMP, :qr_code)`,
+            { booking_code: bookingCode, user_code: user_code, qr_code: qrCode },
+            { autoCommit: false }
         );
+
+        for (let i = 0; i < trips.length; i++) {
+            const trip = trips[i];
+            const logResult = await connection.execute(
+                `WITH OrderedLogs AS (SELECT log_code, ROW_NUMBER() OVER (ORDER BY expected_timestamp ASC) as stop_order FROM trip_logs WHERE schedule_code = :schedule_code)
+                 SELECT log_code, stop_order FROM OrderedLogs WHERE stop_order IN (:pickup, :dropoff)`,
+                { schedule_code: trip.schedule_code, pickup: trip.pickup_order, dropoff: trip.dropoff_order }, 
+                { outFormat: oracledb.OUT_FORMAT_OBJECT }
+            );
+
+            const pickupLog = logResult.rows.find(row => row.STOP_ORDER === parseInt(trip.pickup_order));
+            const dropoffLog = logResult.rows.find(row => row.STOP_ORDER === parseInt(trip.dropoff_order));
+            
+            if (!pickupLog || !dropoffLog) throw new Error(`ไม่พบข้อมูลจุดจอดในรอบรถ ${trip.schedule_code}`);
+
+            const detailCode = `${bookingCode}-${i+1}`;
+            const targetDate = trip.travel_date ? trip.travel_date : new Date().toISOString().split('T')[0];
+
+            await connection.execute(
+                `INSERT INTO booking_details (detail_code, booking_code, pickup_log_code, dropoff_log_code, passenger_count, travel_date, status)
+                 VALUES (:detail_code, :booking_code, :pickup_log, :dropoff_log, :count, TO_DATE(:travel_date, 'YYYY-MM-DD'), 'ACTIVE')`,
+                { 
+                    detail_code: detailCode, booking_code: bookingCode, 
+                    pickup_log: pickupLog.LOG_CODE, dropoff_log: dropoffLog.LOG_CODE, 
+                    count: trip.passenger_count, travel_date: targetDate 
+                },
+                { autoCommit: false }
+            );
+        }
+
+        await connection.commit();
         res.status(201).json({ message: 'จองสำเร็จ', booking_code: bookingCode, qr_code: qrCode });
     } catch (err) {
+        if (connection) await connection.rollback();
         res.status(500).json({ message: 'Cannot create booking', error: err.message });
     } finally {
         if (connection) await connection.close();
@@ -768,7 +880,7 @@ app.get('/api/user/bookings/:userCode', async (req, res) => {
     connection = await getConnection();
 
     await connection.execute(`
-      UPDATE bookings
+      UPDATE booking_details
       SET status = 'NO_SHOW'
       WHERE status = 'ACTIVE' AND pickup_log_code IN (
           SELECT log_code FROM trip_logs WHERE depart_timestamp IS NOT NULL
@@ -777,19 +889,20 @@ app.get('/api/user/bookings/:userCode', async (req, res) => {
     `, [], { autoCommit: true });
 
     const query = `
-      SELECT b.booking_code, TO_CHAR(b.travel_date, 'YYYY-MM-DD') as travel_date, 
-             b.passenger_count, b.status, b.qr_code, s.start_time, r.route_name, 
+      SELECT b.booking_code, TO_CHAR(bd.travel_date, 'YYYY-MM-DD') as travel_date, 
+             bd.passenger_count, bd.status, b.qr_code, s.start_time, r.route_name, 
              sp.stop_name as pickup_name, sd.stop_name as dropoff_name, 
              NVL(s.status, 'ACTIVE') as schedule_status,
-             td.actual_timestamp 
+             td.actual_timestamp, bd.detail_code
       FROM bookings b 
-      JOIN trip_logs tp ON b.pickup_log_code = tp.log_code 
+      JOIN booking_details bd ON b.booking_code = bd.booking_code
+      JOIN trip_logs tp ON bd.pickup_log_code = tp.log_code 
       JOIN stations sp ON tp.stop_code = sp.stop_code 
-      JOIN trip_logs td ON b.dropoff_log_code = td.log_code 
+      JOIN trip_logs td ON bd.dropoff_log_code = td.log_code 
       JOIN stations sd ON td.stop_code = sd.stop_code 
       JOIN schedules s ON tp.schedule_code = s.schedule_code 
       JOIN routes r ON s.route_code = r.route_code
-      WHERE b.user_code = :userCode ORDER BY b.booking_timestamp DESC
+      WHERE b.user_code = :userCode ORDER BY b.booking_timestamp DESC, s.start_time ASC
     `;
     const result = await connection.execute(query, { userCode });
     
@@ -798,16 +911,15 @@ app.get('/api/user/bookings/:userCode', async (req, res) => {
       const scheduleStatus = row[9]; 
       const dropoffActualTime = row[10]; 
       
-      if (derivedStatus === 'COMPLETED') {
-        if (!dropoffActualTime && scheduleStatus !== 'COMPLETED') {
+      if (derivedStatus === 'COMPLETED' && !dropoffActualTime && scheduleStatus !== 'COMPLETED') {
           derivedStatus = 'ONGOING';
-        }
       }
 
       return { 
         booking_code: row[0], travel_date: row[1], passenger_count: row[2], 
         status: derivedStatus, qr_code: row[4], start_time: row[5], 
-        route_name: row[6], pickup_name: row[7], dropoff_name: row[8] 
+        route_name: row[6], pickup_name: row[7], dropoff_name: row[8],
+        detail_code: row[11]
       };
     }));
   } catch (error) {
@@ -822,11 +934,11 @@ app.put('/api/bookings/:bookingCode/cancel', async (req, res) => {
   try {
     const { bookingCode } = req.params;
     connection = await getConnection();
-    const checkStatus = await connection.execute(`SELECT status FROM bookings WHERE booking_code = :bookingCode`, { bookingCode });
-    if (checkStatus.rows.length === 0) return res.status(404).json({ message: "ไม่พบข้อมูลการจอง" });
-    if (checkStatus.rows[0][0] !== 'ACTIVE') return res.status(400).json({ message: "ไม่สามารถยกเลิกรายการนี้ได้ เนื่องจากสถานะไม่ใช่ ACTIVE" });
+    
+    const checkStatus = await connection.execute(`SELECT COUNT(*) FROM booking_details WHERE booking_code = :bookingCode AND status = 'ACTIVE'`, { bookingCode });
+    if (checkStatus.rows[0][0] === 0) return res.status(400).json({ message: "ไม่สามารถยกเลิกรายการนี้ได้ เนื่องจากไม่มีสถานะ ACTIVE หลงเหลืออยู่" });
 
-    await connection.execute(`UPDATE bookings SET status = 'CANCELLED' WHERE booking_code = :bookingCode`, { bookingCode }, { autoCommit: true });
+    await connection.execute(`UPDATE booking_details SET status = 'CANCELLED' WHERE booking_code = :bookingCode AND status = 'ACTIVE'`, { bookingCode }, { autoCommit: true });
     res.json({ message: "ยกเลิกการจองสำเร็จ ที่นั่งถูกคืนเข้าสู่ระบบแล้ว" });
   } catch (error) {
     res.status(500).json({ message: "Error canceling booking", error: error.message });
@@ -834,14 +946,43 @@ app.put('/api/bookings/:bookingCode/cancel', async (req, res) => {
     if (connection) await connection.close();
   }
 });
-
 app.put("/api/bookings/:booking_code/status", async (req, res) => {
   const { booking_code } = req.params;
   const { status } = req.body;
   let connection;
   try {
     connection = await getConnection();
-    await connection.execute(`UPDATE bookings SET status = :status WHERE booking_code = :booking_code`, { status, booking_code }, { autoCommit: true });
+    
+    // เช็คว่ารหัสที่แอปคนขับส่งมา เจาะจงเส้นทาง (เช่น BK123-1) หรือส่งมาแบบเหมารวม (BK123)
+    if (booking_code.includes('-')) {
+      // ถ้าเจาะจงมาแล้ว อัปเดตได้เลย
+      await connection.execute(
+        `UPDATE booking_details SET status = :status WHERE detail_code = :booking_code`, 
+        { status, booking_code }, { autoCommit: true }
+      );
+    } else {
+      // [แก้ไขบัค] ถ้าส่งมาแบบเหมารวม (เกิดจากการสแกน QR) 
+      if (status === 'COMPLETED') {
+        // ให้เลือกเช็คอิน "เฉพาะเส้นทางย่อยคิวแรกสุด ที่ยังรอขึ้นรถอยู่" แค่เส้นทางเดียว!
+        await connection.execute(`
+            UPDATE booking_details 
+            SET status = 'COMPLETED' 
+            WHERE detail_code = (
+                SELECT detail_code FROM (
+                    SELECT bd.detail_code 
+                    FROM booking_details bd
+                    JOIN trip_logs tp ON bd.pickup_log_code = tp.log_code
+                    WHERE bd.booking_code = :booking_code AND bd.status = 'ACTIVE'
+                    ORDER BY tp.expected_timestamp ASC
+                ) WHERE ROWNUM = 1
+            )
+        `, { booking_code }, { autoCommit: true });
+      } else {
+        // ถ้าเป็นสถานะอื่น (เช่น ยกเลิก) ค่อยให้มีผลกับทุกเส้นทาง
+        await connection.execute(`UPDATE booking_details SET status = :status WHERE booking_code = :booking_code`, { status, booking_code }, { autoCommit: true });
+      }
+    }
+    
     res.json({ message: "Status updated successfully" });
   } catch (error) {
     res.status(500).json({ message: "Error updating status", error: error.message });
@@ -859,12 +1000,14 @@ app.get("/api/reports/user-behavior", async (req, res) => {
   try {
     connection = await getConnection();
     const query = `
-      SELECT u.first_name || ' ' || u.last_name AS user_name, COUNT(b.booking_code) AS total_bookings,
-             SUM(CASE WHEN UPPER(b.status) = 'COMPLETED' THEN 1 ELSE 0 END) AS boarded,
-             SUM(CASE WHEN UPPER(b.status) = 'CANCELLED' THEN 1 ELSE 0 END) AS canceled,
-             SUM(CASE WHEN UPPER(b.status) = 'NO_SHOW' THEN 1 ELSE 0 END) AS no_show
-      FROM bookings b JOIN users u ON b.user_code = u.user_code
-      WHERE b.travel_date BETWEEN TO_DATE(:startDate, 'YYYY-MM-DD') AND TO_DATE(:endDate, 'YYYY-MM-DD')
+      SELECT u.first_name || ' ' || u.last_name AS user_name, COUNT(DISTINCT b.booking_code) AS total_bookings,
+             SUM(CASE WHEN UPPER(bd.status) = 'COMPLETED' THEN 1 ELSE 0 END) AS boarded,
+             SUM(CASE WHEN UPPER(bd.status) = 'CANCELLED' THEN 1 ELSE 0 END) AS canceled,
+             SUM(CASE WHEN UPPER(bd.status) = 'NO_SHOW' THEN 1 ELSE 0 END) AS no_show
+      FROM bookings b 
+      JOIN booking_details bd ON b.booking_code = bd.booking_code
+      JOIN users u ON b.user_code = u.user_code
+      WHERE bd.travel_date BETWEEN TO_DATE(:startDate, 'YYYY-MM-DD') AND TO_DATE(:endDate, 'YYYY-MM-DD')
       GROUP BY u.first_name, u.last_name ORDER BY total_bookings DESC
     `;
     const result = await connection.execute(query, { startDate, endDate });
@@ -990,10 +1133,11 @@ app.put('/api/admin/schedules/:code', async (req, res) => {
   try {
     connection = await getConnection();
 
+    // เปลี่ยนไปเช็คจาก booking_details
     const checkBooking = await connection.execute(`
-      SELECT COUNT(*) FROM bookings b
-      JOIN trip_logs t ON b.pickup_log_code = t.log_code
-      WHERE t.schedule_code = :1 AND b.status IN ('ACTIVE', 'COMPLETED')
+      SELECT COUNT(*) FROM booking_details bd
+      JOIN trip_logs t ON bd.pickup_log_code = t.log_code
+      WHERE t.schedule_code = :1 AND bd.status IN ('ACTIVE', 'COMPLETED')
     `, [code]);
 
     const hasBookings = checkBooking.rows[0][0] > 0;
