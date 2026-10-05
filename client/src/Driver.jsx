@@ -8,7 +8,7 @@ import Navbar from "./Navbar";
 import { useAuth } from "./context/AuthContext"; 
 import { 
   Calendar, MapPin, Bus, CheckCircle2, QrCode, Users, ChevronDown, 
-  X, Clock, Navigation, Check, UserX, RefreshCw, History, Upload 
+  X, Clock, Navigation, Check, UserX, RefreshCw, History, Upload, FileText
 } from "lucide-react";
 
 const API_URL = "http://localhost:5000/api";
@@ -25,11 +25,15 @@ function Driver() {
   
   const [isScanning, setIsScanning] = useState(false);
   const [isPassengerListOpen, setIsPassengerListOpen] = useState(true);
+  
+  // [เพิ่มใหม่] State สำหรับจัดการแท็บรายชื่อผู้โดยสาร
+  const [passengerTab, setPassengerTab] = useState('waiting');
 
   const html5QrCodeRef = useRef(null);
   const { user } = useAuth(); 
   const mutRed = '#c8102e';
-const [manualCode, setManualCode] = useState("");
+  const [manualCode, setManualCode] = useState("");
+
   useEffect(() => {
     if (user && user.user_code) {
       fetchSchedules(user.user_code);
@@ -43,6 +47,7 @@ const [manualCode, setManualCode] = useState("");
       setIsScanning(false);
       setIsPassengerListOpen(true);
       setIsChoosingSchedule(false); 
+      setPassengerTab('waiting'); // รีเซ็ตกลับไปหน้าคนรอขึ้นรถเวลาเปลี่ยนรอบ
     } else {
       setPassengers([]);
       setTripLogs([]);
@@ -59,18 +64,17 @@ const [manualCode, setManualCode] = useState("");
         }
         currentScanner = html5QrCodeRef.current;
         
-        // [แก้ไขใหม่] ตั้งค่าให้บังคับเปิดกล้องหน้า (Webcam) สำหรับโน้ตบุ๊ก
         currentScanner.start(
-          { facingMode: "user" }, // เปลี่ยนเป็น "user" เพื่อเรียกใช้งาน Webcam
+          { facingMode: "user" }, 
           { fps: 15, qrbox: { width: 250, height: 250 } },
           (decodedText) => { handleScanSuccess(decodedText, currentScanner); },
-          (errorMessage) => { /* ปล่อยว่างไว้เพื่อไม่ให้แจ้งเตือนรก Console */ }
+          (errorMessage) => { }
         ).catch((err) => {
           console.error("Camera error:", err);
           Swal.fire({ icon: "error", title: "เปิดกล้องไม่สำเร็จ", text: "กรุณาใช้ช่องกรอกรหัสด้านล่างแทนครับ" });
           setIsScanning(false);
         });
-      }, 300); // เพิ่มเวลาหน่วงนิดหน่อย ป้องกันกล้องค้างตอนโหลด
+      }, 300); 
       return () => clearTimeout(timer);
     } else {
       if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
@@ -81,6 +85,7 @@ const [manualCode, setManualCode] = useState("");
       }
     }
   }, [isScanning, passengers]);
+
   const fetchSchedules = async (driverCode) => {
     try {
       const response = await axios.get(`${API_URL}/driver/schedules`, { params: { driver_code: driverCode } });
@@ -106,6 +111,7 @@ const [manualCode, setManualCode] = useState("");
   const handleUpdateStatus = async (bookingCode, status) => {
     try {
       await axios.put(`${API_URL}/bookings/${bookingCode}/status`, { status });
+      // อัปเดตข้อมูลผู้โดยสารในแอปทันที
       setPassengers((prev) => prev.map((p) => p.booking_code === bookingCode ? { ...p, status } : p));
       Swal.fire({ icon: "success", title: status === 'COMPLETED' ? "เช็คอินสำเร็จ" : "อัปเดตสถานะแล้ว", timer: 1500, showConfirmButton: false, position: "center", toast: true });
     } catch (error) {
@@ -118,7 +124,7 @@ const [manualCode, setManualCode] = useState("");
     setIsScanning(false);
 
     const bookingCodeClean = scannedText.trim();
-    const matchedPassenger = passengers.find(p => p.qr_code === bookingCodeClean || p.booking_code === bookingCodeClean);
+    const matchedPassenger = passengers.find(p => p.qr_code === bookingCodeClean || p.booking_code === bookingCodeClean || p.detail_code === bookingCodeClean);
 
     if (matchedPassenger) {
       if (matchedPassenger.status === 'ACTIVE') {
@@ -131,19 +137,17 @@ const [manualCode, setManualCode] = useState("");
       Swal.fire({ icon: "error", title: "ไม่พบข้อมูลตั๋ว", text: `QR Code ไม่ตรงกับรอบรถนี้` });
     }
   };
- // [แก้ไขใหม่] ฟังก์ชันอ่าน QR Code จากรูปภาพ (ต้องปิดกล้องก่อนอ่านไฟล์)
+
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     if (html5QrCodeRef.current) {
       try {
-        // เช็คว่าถ้ากล้องกำลังเปิดอยู่ ให้สั่งปิดกล้องก่อน
         if (html5QrCodeRef.current.isScanning) {
           await html5QrCodeRef.current.stop();
         }
         
-        // เมื่อกล้องปิดแล้ว ค่อยสั่งให้อ่าน QR Code จากรูปภาพ
         const decodedText = await html5QrCodeRef.current.scanFile(file, true);
         handleScanSuccess(decodedText, html5QrCodeRef.current);
         
@@ -155,12 +159,11 @@ const [manualCode, setManualCode] = useState("");
           text: "ระบบไม่พบ QR Code ในรูปภาพนี้ หรือภาพอาจไม่ชัดเจนครับ",
         });
         
-        // ถ้าอ่านไฟล์พัง ให้ปิดหน้าต่างสแกนไปเลยเพื่อรีเซ็ตสถานะ
         setIsScanning(false);
       }
     }
   };
-  // กดยืนยันว่าถึงป้าย
+
   const handleArriveAtStop = async (logCode, stopName) => {
     const confirm = await Swal.fire({
       title: `ถึงจุดจอด ${stopName}?`,
@@ -182,7 +185,6 @@ const [manualCode, setManualCode] = useState("");
     }
   };
 
-  // กดยืนยันว่าออกจากป้าย (และสั่งเช็ค No-Show)
   const handleDepartAtStop = async (logCode, stopName) => {
     const confirm = await Swal.fire({
       title: `ออกรถจาก ${stopName}?`,
@@ -198,11 +200,45 @@ const [manualCode, setManualCode] = useState("");
       try {
         await axios.put(`${API_URL}/driver/trip-logs/${logCode}/depart`);
         await fetchTripLogs(selectedSchedule); 
-        await fetchPassengers(selectedSchedule); // รีเฟรชดูคนที่โดน No Show
+        await fetchPassengers(selectedSchedule); 
         if (user && user.user_code) await fetchSchedules(user.user_code);
       } catch (error) {
         Swal.fire({ icon: "error", title: "เกิดข้อผิดพลาด", text: "ไม่สามารถบันทึกเวลาได้" });
       }
+    }
+  };
+
+  const handleCloseJob = async (scheduleCode) => {
+    try {
+      const summaryRes = await axios.get(`${API_URL}/driver/schedules/${scheduleCode}/summary`);
+      const data = summaryRes.data;
+
+      const result = await Swal.fire({
+        title: 'ยืนยันการปิดรอบเดินรถ?',
+        html: `
+          <div style="text-align: left; background: #f8f9fa; padding: 15px; border-radius: 10px; margin-top: 10px;">
+            <p style="margin-bottom: 8px;">👥 <b>ยอดจองทั้งหมด:</b> ${data.total_booked} ที่นั่ง</p>
+            <p style="margin-bottom: 8px; color: green;">✅ <b>สแกนขึ้นรถจริง:</b> ${data.total_boarded} ที่นั่ง</p>
+            <p style="margin-bottom: 8px; color: red;">❌ <b>ยกเลิก / ไม่มา:</b> ${data.total_no_show + data.total_cancelled} ที่นั่ง</p>
+            ${data.total_pending > 0 ? `<hr/><p style="color: orange; margin-bottom: 0; font-size: 14px;">⚠️ <b>พบผู้โดยสารค้างในระบบ ${data.total_pending} ที่นั่ง</b><br><small>(ระบบจะตัดเป็น ไม่มาแสดงตัว ทันที)</small></p>` : ''}
+          </div>
+        `,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: mutRed, 
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'ยืนยันปิดรอบรถ',
+        cancelButtonText: 'กลับไปตรวจสอบ'
+      });
+
+      if (result.isConfirmed) {
+        await axios.put(`${API_URL}/driver/schedules/${scheduleCode}/complete`);
+        Swal.fire('ปิดงานสำเร็จ!', 'รอบรถนี้ถูกบันทึกเป็นที่เรียบร้อย', 'success');
+        if (user && user.user_code) await fetchSchedules(user.user_code);
+        setIsChoosingSchedule(true);
+      }
+    } catch (error) {
+      Swal.fire('ผิดพลาด', 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อปิดรอบรถได้', 'error');
     }
   };
 
@@ -211,7 +247,6 @@ const [manualCode, setManualCode] = useState("");
   
   const activeScheduleObj = schedules.find(s => s.schedule_code === selectedSchedule);
   
-  // หาป้ายปัจจุบัน (ป้ายที่ยังไม่ได้ Depart)
   const currentStop = tripLogs.find(log => log.depart_time === null);
   const isScheduleFinished = activeScheduleObj?.status === 'COMPLETED';
 
@@ -221,7 +256,6 @@ const [manualCode, setManualCode] = useState("");
     return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
   };
 
-  // จัดกลุ่มรอบประวัติ (History)
   const groupedHistory = historySchedules.reduce((groups, sch) => {
     const date = sch.travel_date || 'ไม่ระบุวันที่';
     if (!groups[date]) groups[date] = [];
@@ -234,7 +268,7 @@ const [manualCode, setManualCode] = useState("");
     if (b === 'ไม่ระบุวันที่') return -1;
     return new Date(b) - new Date(a);
   });
-// จัดกลุ่มรอบรอรับส่ง (Active) ตามวันที่
+
   const groupedActive = activeSchedules.reduce((groups, sch) => {
     const date = sch.travel_date || 'ไม่ระบุวันที่';
     if (!groups[date]) groups[date] = [];
@@ -242,16 +276,30 @@ const [manualCode, setManualCode] = useState("");
     return groups;
   }, {});
 
-  // เรียงลำดับวันที่ จากใกล้สุดไปไกลสุด
   const sortedActiveDates = Object.keys(groupedActive).sort((a, b) => {
     if (a === 'ไม่ระบุวันที่') return 1;
     if (b === 'ไม่ระบุวันที่') return -1;
     return new Date(a) - new Date(b); 
   });
-
-  // [เพิ่มใหม่] หาวันที่ปัจจุบัน (YYYY-MM-DD) เพื่อทำ Highlight
+  
   const todayObj = new Date();
   const todayStr = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, '0')}-${String(todayObj.getDate()).padStart(2, '0')}`;
+  
+  // ==========================================
+  // [เพิ่มใหม่] คำนวณยอดผู้โดยสารสำหรับแสดงในแท็บ
+  // ==========================================
+  const countWaiting = passengers.filter(p => p.status === 'ACTIVE').length;
+  const countBoarded = passengers.filter(p => p.status === 'COMPLETED').length;
+  const countMissed = passengers.filter(p => p.status === 'NO_SHOW' || p.status === 'CANCELLED').length;
+  const countTotal = passengers.length;
+
+  const filteredPassengers = passengers.filter(p => {
+    if (passengerTab === 'waiting') return p.status === 'ACTIVE';
+    if (passengerTab === 'boarded') return p.status === 'COMPLETED';
+    if (passengerTab === 'missed') return p.status === 'NO_SHOW' || p.status === 'CANCELLED';
+    return true; // 'all'
+  });
+
   return (
 
     <div className="position-relative min-vh-100" style={{ backgroundColor: "#f3f4f6" }}>
@@ -291,7 +339,6 @@ const [manualCode, setManualCode] = useState("");
                   <div className="driver-schedule-list">
                     {sortedActiveDates.map(date => {
                       const isToday = date === todayStr; 
-                      // เช็คว่าเป็นวันที่ในอนาคตหรือไม่ (ถ้า date มากกว่าวันนี้ = อนาคต)
                       const isFuture = date !== 'ไม่ระบุวันที่' && date > todayStr;
                       
                       return (
@@ -311,7 +358,6 @@ const [manualCode, setManualCode] = useState("");
                             {groupedActive[date].map((sch) => (
                               <div 
                                 key={sch.schedule_code} 
-                                /* ถ้าเป็นอนาคต ให้ลดความเข้มลง (opacity-50) และทำสีพื้นหลังให้ดูเหมือนกดไม่ได้ */
                                 className={`driver-schedule-item ${isFuture ? 'opacity-50' : ''}`} 
                                 style={{ 
                                   cursor: isFuture ? 'not-allowed' : 'pointer', 
@@ -319,7 +365,6 @@ const [manualCode, setManualCode] = useState("");
                                 }}
                                 onClick={() => { 
                                   if (isFuture) {
-                                    // ถ้าเผลอกด ให้โชว์ข้อความเตือนเล็กๆ
                                     Swal.fire({
                                       icon: 'info',
                                       title: 'ยังไม่ถึงรอบให้บริการ',
@@ -329,7 +374,6 @@ const [manualCode, setManualCode] = useState("");
                                       position: 'center'
                                     });
                                   } else {
-                                    // ถ้าเป็นวันนี้ หรืออดีต ให้กดเข้าทำงานได้ปกติ
                                     setSelectedSchedule(sch.schedule_code); 
                                     setIsChoosingSchedule(false); 
                                   }
@@ -398,10 +442,18 @@ const [manualCode, setManualCode] = useState("");
               </div>
 
               <div className="driver-panel-card">
-                <h2 className="driver-section-title"><MapPin size={20} className="text-danger" /> จุดจอดรถ</h2>
-             <div className="driver-stop-list">
+                <div className="d-flex justify-content-between align-items-center mb-3">
+                  <h2 className="driver-section-title mb-0"><MapPin size={20} className="text-danger" /> จุดจอดรถ</h2>
+                  
+                  {!isScheduleFinished && (!currentStop || (tripLogs.length > 0 && currentStop.log_code === tripLogs[tripLogs.length - 1].log_code && currentStop.actual_time !== null)) && (
+                     <button className="btn btn-sm btn-outline-danger fw-bold rounded-pill" onClick={() => handleCloseJob(selectedSchedule)}>
+                       <FileText size={14} className="me-1 mb-1"/> สรุปและปิดรอบเดินรถ
+                     </button>
+                  )}
+                </div>
+                
+                <div className="driver-stop-list">
                   {tripLogs.map((log, index) => {
-                    // แก้ไขการเช็คค่าให้รัดกุม ป้องกัน undefined
                     const isArrived = log.actual_time !== null && log.actual_time !== undefined;
                     const isDeparted = log.depart_time !== null && log.depart_time !== undefined;
                     const isCurrent = currentStop && currentStop.log_code === log.log_code;
@@ -415,19 +467,16 @@ const [manualCode, setManualCode] = useState("");
                           <div>
                             <h3 className={isCurrent ? 'text-danger fw-bold mb-1' : 'mb-1'}>{log.stop_name}</h3>
                             
-                            {/* กรณียังไม่ถึงป้าย */}
                             {!isArrived && (
                               <div className="text-muted small d-flex align-items-center">
                                 <Clock size={12} className="me-1" /> คาดว่าจะถึง: {log.expected_time} น.
                               </div>
                             )}
                             
-                            {/* กรณีถึงป้ายแล้ว แต่กำลังจอดรอผู้โดยสาร */}
                             {isArrived && !isDeparted && (
                               <div className="badge bg-warning text-dark mt-1 px-2 py-1">กำลังจอดรับผู้โดยสาร...</div>
                             )}
 
-                            {/* กรณีออกรถแล้ว */}
                             {isDeparted && (
                               <div className="text-muted small mt-1">
                                 ออกรถแล้ว: <span className="fw-bold text-success">{log.depart_time} น.</span>
@@ -457,43 +506,80 @@ const [manualCode, setManualCode] = useState("");
                 )}
               </div>
 
-              <div className="driver-panel-card mb-5">
-                <button className="driver-passenger-toggle" onClick={() => setIsPassengerListOpen(!isPassengerListOpen)}>
-                  <span className="d-flex align-items-center">
-                    <Users size={20} className="text-danger me-2" /> ผู้โดยสาร
-                    <span className="badge bg-danger ms-2 rounded-pill px-2">{passengers.filter(p => p.status === 'COMPLETED').length}/{passengers.length}</span>
+            <div className="driver-panel-card mb-5 pb-2">
+                <button className="driver-passenger-toggle" onClick={() => setIsPassengerListOpen(!isPassengerListOpen)} style={{ background: 'none', border: 'none', width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0' }}>
+                  <span className="d-flex align-items-center fw-bold fs-5">
+                    <Users size={20} className="text-danger me-2" /> รายชื่อผู้โดยสาร
                   </span>
-                  <ChevronDown size={20} style={{ transform: isPassengerListOpen ? 'rotate(180deg)' : 'none', transition: '0.2s' }} />
+                  <div className="d-flex align-items-center">
+                    {/* ป้ายแสดงสถานะตามรูปภาพ (ใช้บริการ X/Y คน) */}
+                    <span className="badge bg-danger bg-opacity-10 text-danger border border-danger rounded-pill px-3 py-2 me-3" style={{ fontSize: '13px', fontWeight: 'bold' }}>
+                      ใช้บริการ {countBoarded}/{countTotal} คน
+                    </span>
+                    <ChevronDown size={20} className="text-dark" style={{ transform: isPassengerListOpen ? 'rotate(180deg)' : 'none', transition: '0.2s' }} />
+                  </div>
                 </button>
 
                 {isPassengerListOpen && (
-                  <div className="driver-passenger-list custom-scrollbar">
-                    {loading ? (
-                      <div className="text-center py-4 text-muted">กำลังโหลดข้อมูล...</div>
-                    ) : passengers.length === 0 ? (
-                      <div className="text-center py-4 text-muted bg-light rounded-3 border border-dashed">ไม่มีผู้โดยสารจองรอบนี้</div>
-                    ) : (
-                      passengers.map((p) => (
-                        <div key={p.booking_code} className={`driver-passenger-row ${p.status !== 'ACTIVE' ? 'is-complete' : ''}`}>
-                          <div className="driver-passenger-details">
-                            <h3>{p.passenger_name}</h3>
-                            <span className="text-muted small">รหัส: {p.booking_code}</span>
+                  <div className="animate-fade-in mt-4 border-top pt-4">
+                    
+                    {/* แถบเมนู (Tabs) แยกประเภทผู้โดยสาร */}
+                    <div className="d-flex gap-2 overflow-auto pb-2 mb-3 hide-scrollbar">
+                      <button 
+                        onClick={() => setPassengerTab('waiting')} 
+                        className={`btn rounded-pill px-3 py-1 small fw-bold border-0 text-nowrap ${passengerTab === 'waiting' ? 'bg-warning text-dark shadow-sm' : 'bg-light text-secondary'}`}
+                      >
+                        รอขึ้นรถ ({countWaiting})
+                      </button>
+                      <button 
+                        onClick={() => setPassengerTab('boarded')} 
+                        className={`btn rounded-pill px-3 py-1 small fw-bold border-0 text-nowrap ${passengerTab === 'boarded' ? 'bg-success text-white shadow-sm' : 'bg-light text-secondary'}`}
+                      >
+                        เช็คอินแล้ว ({countBoarded})
+                      </button>
+                      <button 
+                        onClick={() => setPassengerTab('missed')} 
+                        className={`btn rounded-pill px-3 py-1 small fw-bold border-0 text-nowrap ${passengerTab === 'missed' ? 'bg-secondary text-white shadow-sm' : 'bg-light text-secondary'}`}
+                      >
+                        ไม่มา/ยกเลิก ({countMissed})
+                      </button>
+                      <button 
+                        onClick={() => setPassengerTab('all')} 
+                        className={`btn rounded-pill px-3 py-1 small fw-bold border-0 text-nowrap ${passengerTab === 'all' ? 'text-white shadow-sm' : 'bg-light text-secondary'}`} 
+                        style={{ backgroundColor: passengerTab === 'all' ? mutRed : '' }}
+                      >
+                        ทั้งหมด ({countTotal})
+                      </button>
+                    </div>
+
+                    <div className="driver-passenger-list custom-scrollbar" style={{ maxHeight: '320px', overflowY: 'auto' }}>
+                      {loading ? (
+                        <div className="text-center py-4 text-muted">กำลังโหลดข้อมูล...</div>
+                      ) : filteredPassengers.length === 0 ? (
+                        <div className="text-center py-4 text-muted bg-light rounded-3 border border-dashed">ไม่มีผู้โดยสารในสถานะนี้</div>
+                      ) : (
+                        filteredPassengers.map((p, i) => (
+                          <div key={p.booking_code + "-" + i} className={`driver-passenger-row ${p.status !== 'ACTIVE' ? 'is-complete' : ''}`}>
+                            <div className="driver-passenger-details">
+                              <h3 className={p.status === 'NO_SHOW' || p.status === 'CANCELLED' ? 'text-decoration-line-through text-muted' : ''}>{p.passenger_name}</h3>
+                              <span className="text-muted small">รหัส: {p.booking_code}</span>
+                            </div>
+                            <div className="d-flex align-items-center gap-2">
+                              {p.status === 'ACTIVE' ? (
+                                <>
+                                  <button className="driver-checkin-btn" onClick={() => handleUpdateStatus(p.booking_code, 'COMPLETED')}><Check size={14} /></button>
+                                  <button className="driver-noshow-btn" onClick={() => handleUpdateStatus(p.booking_code, 'NO_SHOW')}><UserX size={14} /></button>
+                                </>
+                              ) : (
+                                <span className={`driver-status ${p.status === 'COMPLETED' ? 'driver-status-complete' : (p.status === 'NO_SHOW' ? 'bg-secondary text-white' : 'bg-light text-muted')}`}>
+                                  {p.status === 'COMPLETED' ? 'เช็คอินแล้ว' : (p.status === 'NO_SHOW' ? 'ไม่มา' : 'ยกเลิก')}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <div className="d-flex align-items-center gap-2">
-                            {p.status === 'ACTIVE' ? (
-                              <>
-                                <button className="driver-checkin-btn" onClick={() => handleUpdateStatus(p.booking_code, 'COMPLETED')}><Check size={14} /></button>
-                                <button className="driver-noshow-btn" onClick={() => handleUpdateStatus(p.booking_code, 'NO_SHOW')}><UserX size={14} /></button>
-                              </>
-                            ) : (
-                              <span className={`driver-status ${p.status === 'COMPLETED' ? 'driver-status-complete' : (p.status === 'NO_SHOW' ? 'bg-secondary text-white' : 'bg-light text-muted')}`}>
-                                {p.status === 'COMPLETED' ? 'เช็คอินแล้ว' : (p.status === 'NO_SHOW' ? 'ไม่มา' : 'ยกเลิก')}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ))
-                    )}
+                        ))
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -525,7 +611,6 @@ const [manualCode, setManualCode] = useState("");
             
             <div className="d-flex flex-column gap-3 justify-content-center mx-auto" style={{ maxWidth: '300px' }}>
               
-              {/* 1. ปุ่มอัปโหลดรูปภาพ */}
               <div className="w-100">
                 <input 
                   type="file" 
@@ -541,7 +626,6 @@ const [manualCode, setManualCode] = useState("");
 
               <div className="text-white-50 small" style={{ fontSize: '11px' }}>- หรือกรอกรหัสด้วยมือ -</div>
 
-              {/* 2. ช่องกรอกรหัสตั๋วด้วยมือ */}
               <div className="d-flex gap-2">
                 <input 
                   type="text" 
