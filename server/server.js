@@ -990,35 +990,44 @@ app.put("/api/bookings/:booking_code/status", async (req, res) => {
     if (connection) await connection.close();
   }
 });
-
 // =====================================================
-// REPORTS API
+// REPORTS API (อัปเดตคำนวณยอดแบบ Master-Detail นับตามจำนวนคนจริง)
 // =====================================================
 app.get("/api/reports/user-behavior", async (req, res) => {
   const { startDate, endDate } = req.query;
   let connection;
   try {
     connection = await getConnection();
+    
+    // เปลี่ยนจาก COUNT เป็น SUM(bd.passenger_count) เพื่อให้ได้ยอดที่นั่งจริงๆ
     const query = `
-      SELECT u.first_name || ' ' || u.last_name AS user_name, COUNT(DISTINCT b.booking_code) AS total_bookings,
-             SUM(CASE WHEN UPPER(bd.status) = 'COMPLETED' THEN 1 ELSE 0 END) AS boarded,
-             SUM(CASE WHEN UPPER(bd.status) = 'CANCELLED' THEN 1 ELSE 0 END) AS canceled,
-             SUM(CASE WHEN UPPER(bd.status) = 'NO_SHOW' THEN 1 ELSE 0 END) AS no_show
+      SELECT u.first_name || ' ' || u.last_name AS user_name, 
+             NVL(SUM(bd.passenger_count), 0) AS total_bookings,
+             NVL(SUM(CASE WHEN UPPER(bd.status) = 'COMPLETED' THEN bd.passenger_count ELSE 0 END), 0) AS boarded,
+             NVL(SUM(CASE WHEN UPPER(bd.status) = 'CANCELLED' THEN bd.passenger_count ELSE 0 END), 0) AS canceled,
+             NVL(SUM(CASE WHEN UPPER(bd.status) = 'NO_SHOW' THEN bd.passenger_count ELSE 0 END), 0) AS no_show
       FROM bookings b 
       JOIN booking_details bd ON b.booking_code = bd.booking_code
       JOIN users u ON b.user_code = u.user_code
       WHERE bd.travel_date BETWEEN TO_DATE(:startDate, 'YYYY-MM-DD') AND TO_DATE(:endDate, 'YYYY-MM-DD')
-      GROUP BY u.first_name, u.last_name ORDER BY total_bookings DESC
+      GROUP BY u.first_name, u.last_name 
+      ORDER BY total_bookings DESC
     `;
+    
     const result = await connection.execute(query, { startDate, endDate });
-    res.json(result.rows.map((row) => ({ user_name: row[0], total: row[1] || 0, boarded: row[2] || 0, canceled: row[3] || 0, no_show: row[4] || 0 })));
+    res.json(result.rows.map((row) => ({ 
+      user_name: row[0], 
+      total: row[1], 
+      boarded: row[2], 
+      canceled: row[3], 
+      no_show: row[4] 
+    })));
   } catch (error) {
     res.status(500).json({ message: "Cannot generate report", error: error.message });
   } finally {
     if (connection) await connection.close();
   }
 });
-
 // ==========================================
 // Admin Master Data / Routes / Schedules
 // ==========================================

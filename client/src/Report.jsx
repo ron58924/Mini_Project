@@ -12,14 +12,15 @@ import {
 } from "chart.js";
 import { Bar, Pie } from "react-chartjs-2";
 import "bootstrap/dist/css/bootstrap.min.css";
-import Navbar from "./navbar"; // แก้เป็น navbar (n ตัวเล็ก) ตามชื่อไฟล์จริง
+import Navbar from "./Navbar"; 
 
 // ลงทะเบียน Chart.js
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Title, Tooltip, Legend);
 
 function UserBehaviorReport() {
-  const [startDate, setStartDate] = useState("2025-04-12");
-  const [endDate, setEndDate] = useState("2025-04-15");
+  // [แก้ไข] ตั้งค่า Default เป็น 1 ต.ค. 2026 ถึง 31 ต.ค. 2026
+  const [startDate, setStartDate] = useState("2026-10-01");
+  const [endDate, setEndDate] = useState("2026-10-31");
   const [reportData, setReportData] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -54,7 +55,7 @@ function UserBehaviorReport() {
     }
   };
 
-  // ดึงข้อมูลเมื่อเปิดหน้าครั้งแรก (ย้ายฟังก์ชันมาไว้ข้างในเพื่อแก้ปัญหา ESLint)
+  // ดึงข้อมูลเมื่อเปิดหน้าครั้งแรก
   useEffect(() => {
     fetchReportData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -111,23 +112,40 @@ function UserBehaviorReport() {
   };
 
   return (
-    <>
+    <div className="bg-light min-vh-100">
       <Navbar />
       <div className="container py-5" style={{ fontFamily: "'Prompt', sans-serif" }}>
         <h2 className="mb-4 fw-bold text-dark">รายงานพฤติกรรมของผู้ใช้</h2>
 
-        {/* ส่วนเลือกวันที่ */}
-        <div className="card shadow-sm mb-4 border-0">
-          <div className="card-body bg-light rounded d-flex gap-3 align-items-end">
+        {/* [แก้ไข] ส่วนเลือกวันที่ให้ตรงตามรูปแบบในรูปภาพ */}
+        <div className="card shadow-sm mb-4 border-0 rounded-3">
+          <div className="card-body bg-white rounded-3 d-flex flex-wrap gap-3 align-items-end p-4">
             <div>
-              <label className="form-label fw-bold">ตั้งแต่วันที่</label>
-              <input type="date" className="form-control" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              <label className="form-label fw-bold text-dark mb-2" style={{ fontSize: '14px' }}>ตั้งแต่วันที่</label>
+              <input 
+                type="date" 
+                className="form-control" 
+                value={startDate} 
+                onChange={(e) => setStartDate(e.target.value)} 
+                style={{ width: '160px' }}
+              />
             </div>
             <div>
-              <label className="form-label fw-bold">ถึงวันที่</label>
-              <input type="date" className="form-control" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              <label className="form-label fw-bold text-dark mb-2" style={{ fontSize: '14px' }}>ถึงวันที่</label>
+              <input 
+                type="date" 
+                className="form-control" 
+                value={endDate} 
+                onChange={(e) => setEndDate(e.target.value)} 
+                style={{ width: '160px' }}
+              />
             </div>
-            <button className="btn btn-primary px-4" onClick={handleSearch} disabled={loading}>
+            <button 
+              className="btn btn-primary px-4 fw-bold" 
+              onClick={handleSearch} 
+              disabled={loading}
+              style={{ padding: '0.375rem 1rem' }}
+            >
               {loading ? "กำลังโหลด..." : "ค้นหา"}
             </button>
           </div>
@@ -136,42 +154,42 @@ function UserBehaviorReport() {
         {reportData.length > 0 && (
           <>
             {/* ตารางข้อมูล */}
-            <div className="card shadow-sm border-0 mb-5">
-              <div className="card-header bg-secondary text-white text-center py-3">
-                <h5 className="mb-0">
+            <div className="card shadow-sm border-0 mb-5 rounded-3 overflow-hidden">
+              <div className="card-header bg-secondary text-white text-center py-3 border-0">
+                <h5 className="mb-0 fw-bold fs-6">
                   รายงานพฤติกรรมของผู้ใช้ภายในช่วงวันที่ {formatThaiDate(startDate)} ถึง {formatThaiDate(endDate)}
                 </h5>
               </div>
-              <div className="card-body p-0">
+              <div className="card-body p-0 bg-white">
                 <div className="table-responsive">
-                  <table className="table table-bordered table-hover mb-0 text-center align-middle">
+                  <table className="table table-hover mb-0 text-center align-middle">
                     <thead className="table-light">
                       <tr>
-                        <th className="text-start ps-4">ผู้ใช้</th>
-                        <th>การจองทั้งหมด</th>
-                        <th>ขึ้นรถจริง</th>
-                        <th>ยกเลิก</th>
-                        <th>No Show</th>
+                        <th className="text-start ps-4 py-3 border-bottom">ผู้ใช้</th>
+                        <th className="py-3 border-bottom">การจองทั้งหมด</th>
+                        <th className="py-3 border-bottom">ขึ้นรถจริง</th>
+                        <th className="py-3 border-bottom">ยกเลิก</th>
+                        <th className="py-3 border-bottom">No Show</th>
                       </tr>
                     </thead>
                     <tbody>
                       {reportData.map((row, idx) => (
                         <tr key={idx}>
-                          <td className="text-start ps-4">{row.user_name}</td>
-                          <td>{row.total}</td>
-                          <td>{row.boarded}</td>
-                          <td>{row.canceled}</td>
-                          <td>{row.no_show}</td>
+                          <td className="text-start ps-4 py-3">{row.user_name}</td>
+                          <td className="py-3">{row.total}</td>
+                          <td className="py-3 text-success fw-bold">{row.boarded}</td>
+                          <td className="py-3 text-danger">{row.canceled}</td>
+                          <td className="py-3 text-warning text-dark">{row.no_show}</td>
                         </tr>
                       ))}
                     </tbody>
                     <tfoot className="table-light fw-bold">
                       <tr>
-                        <td className="text-end pe-4">รวมทั้งหมด</td>
-                        <td>{summary.total}</td>
-                        <td>{summary.boarded}</td>
-                        <td>{summary.canceled}</td>
-                        <td>{summary.no_show}</td>
+                        <td className="text-end pe-4 py-3 border-top">รวมทั้งหมด</td>
+                        <td className="py-3 border-top">{summary.total}</td>
+                        <td className="py-3 border-top text-success">{summary.boarded}</td>
+                        <td className="py-3 border-top text-danger">{summary.canceled}</td>
+                        <td className="py-3 border-top text-warning text-dark">{summary.no_show}</td>
                       </tr>
                     </tfoot>
                   </table>
@@ -182,12 +200,12 @@ function UserBehaviorReport() {
             {/* ส่วนกราฟ */}
             <div className="row g-4">
               <div className="col-lg-8">
-                <div className="card shadow-sm border-0 h-100">
-                  <div className="card-body text-center p-4">
-                    <h4 className="fw-bold mb-1">พฤติกรรมผู้ใช้</h4>
-                    <h5 className="text-muted mb-4">
+                <div className="card shadow-sm border-0 h-100 rounded-3">
+                  <div className="card-body text-center p-4 bg-white rounded-3">
+                    <h5 className="fw-bold mb-1 text-dark">พฤติกรรมผู้ใช้</h5>
+                    <h6 className="text-muted mb-4 small">
                       ({formatThaiDate(startDate)} ถึง {formatThaiDate(endDate)})
-                    </h5>
+                    </h6>
                     <div style={{ height: "350px" }}>
                       <Bar 
                         data={barChartData} 
@@ -203,12 +221,12 @@ function UserBehaviorReport() {
               </div>
 
               <div className="col-lg-4">
-                <div className="card shadow-sm border-0 h-100">
-                  <div className="card-body text-center p-4">
-                    <h4 className="fw-bold mb-1">สัดส่วนรวม ลูกค้าทุกราย</h4>
-                    <h5 className="text-muted mb-4">
+                <div className="card shadow-sm border-0 h-100 rounded-3">
+                  <div className="card-body text-center p-4 bg-white rounded-3">
+                    <h5 className="fw-bold mb-1 text-dark">สัดส่วนรวม ลูกค้าทุกราย</h5>
+                    <h6 className="text-muted mb-4 small">
                       ({formatThaiDate(startDate)} ถึง {formatThaiDate(endDate)})
-                    </h5>
+                    </h6>
                     <div style={{ height: "300px", display: "flex", justifyContent: "center" }}>
                       <Pie 
                         data={pieChartData} 
@@ -226,7 +244,7 @@ function UserBehaviorReport() {
           </>
         )}
       </div>
-    </>
+    </div>
   );
 }
 

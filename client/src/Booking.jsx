@@ -480,7 +480,7 @@ const Booking = () => {
                     )}
 
                     <button type="submit" className="btn w-100 py-3 rounded-4 fw-bold mt-5 shadow-sm text-white interactive-card fs-6" style={{ backgroundColor: mutRed }} disabled={!selectedResult}>
-                      เพิ่มลงตระกร้า
+                      จอง
                     </button>
                   </form>
 
