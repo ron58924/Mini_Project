@@ -684,9 +684,8 @@ app.get('/api/stations', async (req, res) => {
     if (connection) await connection.close();
   }
 });
-
 // ==========================================
-// API: ค้นหารอบรถแบบ Smart Search (อัปเดตให้รองรับ Master-Detail)
+// API: ค้นหารอบรถแบบ Smart Search (รองรับระบบต่อรถอัตโนมัติ)
 // ==========================================
 app.get('/api/booking/search', async (req, res) => {
   const { pickup_code, dropoff_code, travel_date } = req.query;
@@ -694,6 +693,7 @@ app.get('/api/booking/search', async (req, res) => {
   try {
     connection = await getConnection();
 
+    // 1. กวาดล้างที่นั่งก่อนการค้นหา (Auto No-Show)
     await connection.execute(`
       UPDATE booking_details
       SET status = 'NO_SHOW'
@@ -703,76 +703,116 @@ app.get('/api/booking/search', async (req, res) => {
       )
     `, [], { autoCommit: true });
 
-    const query = `
+    // ----------------------------------------------------
+    // 2. ค้นหารถแบบวิ่งตรง (Direct Route)
+    // ----------------------------------------------------
+    const directQuery = `
       WITH OrderedLogs AS (
           SELECT t.log_code, t.schedule_code, t.stop_code, t.expected_timestamp, t.depart_timestamp, 
                  ROW_NUMBER() OVER (PARTITION BY t.schedule_code ORDER BY t.expected_timestamp ASC) as stop_order
-          FROM trip_logs t
-          JOIN schedules s ON t.schedule_code = s.schedule_code
+          FROM trip_logs t JOIN schedules s ON t.schedule_code = s.schedule_code
           WHERE s.travel_date = TO_DATE(:travel_date, 'YYYY-MM-DD')
       ),
       MatchingSchedules AS (
           SELECT p.schedule_code, p.log_code as pickup_log_code, p.stop_order as pickup_order, p.expected_timestamp as pickup_time,
                  d.log_code as dropoff_log_code, d.stop_order as dropoff_order, d.expected_timestamp as dropoff_time
-          FROM OrderedLogs p 
-          JOIN OrderedLogs d ON p.schedule_code = d.schedule_code 
+          FROM OrderedLogs p JOIN OrderedLogs d ON p.schedule_code = d.schedule_code 
           JOIN schedules sch ON p.schedule_code = sch.schedule_code
           WHERE p.stop_code = :pickup_code AND d.stop_code = :dropoff_code AND p.stop_order < d.stop_order 
-            AND p.expected_timestamp > (SYSTIMESTAMP + INTERVAL '20' MINUTE)
-            AND NVL(sch.status, 'ACTIVE') != 'COMPLETED'
-            AND p.depart_timestamp IS NULL
+            AND p.expected_timestamp > (SYSTIMESTAMP + INTERVAL '20' MINUTE) AND NVL(sch.status, 'ACTIVE') != 'COMPLETED' AND p.depart_timestamp IS NULL
       ),
       BookingOrders AS (
           SELECT bd.detail_code, bd.passenger_count, p.schedule_code, p.stop_order as p_order, d.stop_order as d_order
-          FROM booking_details bd 
-          JOIN OrderedLogs p ON bd.pickup_log_code = p.log_code 
-          JOIN OrderedLogs d ON bd.dropoff_log_code = d.log_code
-          WHERE bd.status IN ('ACTIVE', 'COMPLETED') 
-            AND bd.travel_date = TO_DATE(:travel_date, 'YYYY-MM-DD')
+          FROM booking_details bd JOIN OrderedLogs p ON bd.pickup_log_code = p.log_code JOIN OrderedLogs d ON bd.dropoff_log_code = d.log_code
+          WHERE bd.status IN ('ACTIVE', 'COMPLETED') AND bd.travel_date = TO_DATE(:travel_date, 'YYYY-MM-DD')
       ),
       SeatUsagePerStop AS (
           SELECT tl.schedule_code, tl.stop_order, NVL(SUM(bo.passenger_count), 0) as used_seats
-          FROM OrderedLogs tl
-          LEFT JOIN BookingOrders bo 
-                 ON bo.schedule_code = tl.schedule_code 
-                AND bo.p_order <= tl.stop_order 
-                AND bo.d_order > tl.stop_order
+          FROM OrderedLogs tl LEFT JOIN BookingOrders bo ON bo.schedule_code = tl.schedule_code AND bo.p_order <= tl.stop_order AND bo.d_order > tl.stop_order
           GROUP BY tl.schedule_code, tl.stop_order
       ),
       MaxSeatUsagePerSegment AS (
           SELECT ms.schedule_code, ms.pickup_order, ms.dropoff_order, NVL(MAX(su.used_seats), 0) as max_used_seats
-          FROM MatchingSchedules ms
-          JOIN SeatUsagePerStop su 
-            ON su.schedule_code = ms.schedule_code 
-           AND su.stop_order >= ms.pickup_order 
-           AND su.stop_order < ms.dropoff_order
+          FROM MatchingSchedules ms JOIN SeatUsagePerStop su ON su.schedule_code = ms.schedule_code AND su.stop_order >= ms.pickup_order AND su.stop_order < ms.dropoff_order
           GROUP BY ms.schedule_code, ms.pickup_order, ms.dropoff_order
       )
-      SELECT ms.schedule_code, r.route_code, r.route_name, 
-             TO_CHAR(ms.pickup_time, 'HH24:MI') as expected_pickup_time, 
-             TO_CHAR(ms.dropoff_time, 'HH24:MI') as expected_dropoff_time, 
-             v.capacity, mus.max_used_seats, 
-             (v.capacity - mus.max_used_seats) AS available_seats, 
-             ms.pickup_order, ms.dropoff_order 
-      FROM MatchingSchedules ms 
-      JOIN schedules s ON ms.schedule_code = s.schedule_code 
-      JOIN routes r ON s.route_code = r.route_code 
-      JOIN vehicles v ON s.vehicle_code = v.vehicle_code
-      JOIN MaxSeatUsagePerSegment mus 
-        ON mus.schedule_code = ms.schedule_code 
-       AND mus.pickup_order = ms.pickup_order 
-       AND mus.dropoff_order = ms.dropoff_order
+      SELECT ms.schedule_code, r.route_code, r.route_name, TO_CHAR(ms.pickup_time, 'HH24:MI'), TO_CHAR(ms.dropoff_time, 'HH24:MI'), 
+             v.capacity, mus.max_used_seats, (v.capacity - mus.max_used_seats) AS available_seats, ms.pickup_order, ms.dropoff_order 
+      FROM MatchingSchedules ms JOIN schedules s ON ms.schedule_code = s.schedule_code JOIN routes r ON s.route_code = r.route_code JOIN vehicles v ON s.vehicle_code = v.vehicle_code
+      JOIN MaxSeatUsagePerSegment mus ON mus.schedule_code = ms.schedule_code AND mus.pickup_order = ms.pickup_order AND mus.dropoff_order = ms.dropoff_order
       ORDER BY ms.pickup_time ASC
     `;
     
-    const result = await connection.execute(query, { pickup_code, dropoff_code, travel_date });
+    const directResult = await connection.execute(directQuery, { pickup_code, dropoff_code, travel_date });
     
-    res.json(result.rows.map(row => ({
-      schedule_code: row[0], route_code: row[1], route_name: row[2], 
-      expected_pickup_time: row[3], expected_dropoff_time: row[4], 
-      total_capacity: row[5], used_seats: row[6], available_seats: row[7], 
-      pickup_order: row[8], dropoff_order: row[9]
+    // ถ้าพบรถที่วิ่งตรง ให้ส่งข้อมูลกลับไปเลย
+    if (directResult.rows.length > 0) {
+      return res.json(directResult.rows.map(row => ({
+        is_transfer: false,
+        schedule_code: row[0], route_code: row[1], route_name: row[2], 
+        expected_pickup_time: row[3], expected_dropoff_time: row[4], 
+        total_capacity: row[5], used_seats: row[6], available_seats: row[7], 
+        pickup_order: row[8], dropoff_order: row[9]
+      })));
+    }
+// ----------------------------------------------------
+    // 3. ถ้าไม่มีรถวิ่งตรง ให้ค้นหา "จุดต่อรถ" (Transfer Route)
+    // ----------------------------------------------------
+    const transferQuery = `
+      WITH OrderedLogs AS (
+          SELECT t.log_code, t.schedule_code, t.stop_code, t.expected_timestamp, t.depart_timestamp, 
+                 ROW_NUMBER() OVER (PARTITION BY t.schedule_code ORDER BY t.expected_timestamp ASC) as stop_order
+          FROM trip_logs t JOIN schedules s ON t.schedule_code = s.schedule_code
+          WHERE s.travel_date = TO_DATE(:travel_date, 'YYYY-MM-DD') AND NVL(s.status, 'ACTIVE') != 'COMPLETED'
+      ),
+      ScheduleSeats AS (
+          SELECT s.schedule_code, v.capacity, 
+                 (SELECT NVL(SUM(bd.passenger_count), 0) FROM booking_details bd JOIN trip_logs tl ON bd.pickup_log_code = tl.log_code 
+                  WHERE tl.schedule_code = s.schedule_code AND bd.status IN ('ACTIVE', 'COMPLETED') AND bd.travel_date = TO_DATE(:travel_date, 'YYYY-MM-DD')) as used_seats
+          FROM schedules s JOIN vehicles v ON s.vehicle_code = v.vehicle_code
+          WHERE s.travel_date = TO_DATE(:travel_date, 'YYYY-MM-DD')
+      ),
+      RawTransfers AS (
+          SELECT 
+              l1.schedule_code as s1_code, r1.route_name as s1_route, TO_CHAR(l1.pickup_time, 'HH24:MI') as s1_pickup, TO_CHAR(l1.transfer_time, 'HH24:MI') as s1_drop, l1.p_order as s1_p_order, l1.t_order as s1_d_order,
+              l2.schedule_code as s2_code, r2.route_name as s2_route, TO_CHAR(l2.transfer_time, 'HH24:MI') as s2_pickup, TO_CHAR(l2.dropoff_time, 'HH24:MI') as s2_drop, l2.t_order as s2_p_order, l2.d_order as s2_d_order,
+              st.stop_name, st.stop_code, LEAST(ss1.capacity - ss1.used_seats, ss2.capacity - ss2.used_seats) as available_seats,
+              l1.pickup_time,
+              -- [ส่วนที่แก้บัค] จัดกลุ่มรถ 2 คันที่ตรงกัน แล้วเลือกเฉพาะ "จุดต่อรถ" ป้ายแรกสุดที่เจอเท่านั้น
+              ROW_NUMBER() OVER (PARTITION BY l1.schedule_code, l2.schedule_code ORDER BY l1.transfer_time ASC) as rn
+          FROM (
+              SELECT p.schedule_code, p.expected_timestamp as pickup_time, t.expected_timestamp as transfer_time, t.stop_code as transfer_stop, p.stop_order as p_order, t.stop_order as t_order
+              FROM OrderedLogs p JOIN OrderedLogs t ON p.schedule_code = t.schedule_code AND p.stop_order < t.stop_order
+              WHERE p.stop_code = :pickup_code AND p.expected_timestamp > (SYSTIMESTAMP + INTERVAL '20' MINUTE) AND p.depart_timestamp IS NULL
+          ) l1
+          JOIN (
+              SELECT t.schedule_code, t.expected_timestamp as transfer_time, d.expected_timestamp as dropoff_time, t.stop_code as transfer_stop, t.stop_order as t_order, d.stop_order as d_order
+              FROM OrderedLogs t JOIN OrderedLogs d ON t.schedule_code = d.schedule_code AND t.stop_order < d.stop_order
+              WHERE d.stop_code = :dropoff_code
+          ) l2 ON l1.transfer_stop = l2.transfer_stop
+          JOIN stations st ON l1.transfer_stop = st.stop_code
+          JOIN schedules s1 ON l1.schedule_code = s1.schedule_code JOIN routes r1 ON s1.route_code = r1.route_code
+          JOIN schedules s2 ON l2.schedule_code = s2.schedule_code JOIN routes r2 ON s2.route_code = r2.route_code
+          JOIN ScheduleSeats ss1 ON l1.schedule_code = ss1.schedule_code JOIN ScheduleSeats ss2 ON l2.schedule_code = ss2.schedule_code
+          WHERE l2.transfer_time > l1.transfer_time 
+            AND l2.transfer_time < l1.transfer_time + INTERVAL '120' MINUTE
+            AND l1.schedule_code != l2.schedule_code
+      )
+      -- กรองเอาเฉพาะ Row ที่เป็นจุดต่อรถป้ายแรก (rn = 1) เท่านั้น
+      SELECT * FROM RawTransfers WHERE rn = 1 ORDER BY pickup_time ASC
+    `;
+    
+    const transferResult = await connection.execute(transferQuery, { pickup_code, dropoff_code, travel_date });
+    
+    res.json(transferResult.rows.map(row => ({
+      is_transfer: true,
+      expected_pickup_time: row[2], expected_dropoff_time: row[9],
+      transfer_station_name: row[12], transfer_station_code: row[13],
+      available_seats: row[14],
+      leg1: { schedule_code: row[0], route_name: row[1], expected_pickup_time: row[2], expected_dropoff_time: row[3], pickup_order: row[4], dropoff_order: row[5] },
+      leg2: { schedule_code: row[6], route_name: row[7], expected_pickup_time: row[8], expected_dropoff_time: row[9], pickup_order: row[10], dropoff_order: row[11] }
     })));
+
   } catch (error) {
     console.error("Search Error:", error);
     res.status(500).json({ message: "Error searching schedules", error: error.message });

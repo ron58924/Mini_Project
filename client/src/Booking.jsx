@@ -2,25 +2,22 @@ import React, { useState, useEffect, useRef } from 'react';
 import Navbar from './Navbar'; 
 import './Booking.css'; 
 import { useAuth } from './context/AuthContext'; 
-import { MapPin, Navigation, Users, Clock, Info, ShoppingBag, Trash2, CheckCircle2, XCircle, Search, CalendarDays, ChevronDown, AlertCircle, HelpCircle, UserX } from 'lucide-react';
+import { MapPin, Navigation, Users, Clock, Info, ShoppingBag, Trash2, CheckCircle2, XCircle, Search, CalendarDays, ChevronDown, AlertCircle, HelpCircle, UserX, ArrowRight } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import axios from 'axios';
 
 const Booking = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('booking'); 
-
   const [stations, setStations] = useState([]);
   const [pickupCode, setPickupCode] = useState('');
   const [dropoffCode, setDropoffCode] = useState('');
   const [passengerCount, setPassengerCount] = useState(1);
-  
-  const getTodayYMD = () => {
+  const [travelDate, setTravelDate] = useState(() => {
     const d = new Date();
     d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
     return d.toISOString().split('T')[0];
-  };
-
-  const [travelDate, setTravelDate] = useState(getTodayYMD()); 
+  }); 
 
   const [showPickupDropdown, setShowPickupDropdown] = useState(false);
   const [showDropoffDropdown, setShowDropoffDropdown] = useState(false);
@@ -34,76 +31,45 @@ const Booking = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [historyBookings, setHistoryBookings] = useState([]);
   const [historyFilter, setHistoryFilter] = useState('ACTIVE');
-
   const [selectedQRCode, setSelectedQRCode] = useState(null);
-
   const [popup, setPopup] = useState({ show: false, title: '', message: '', type: 'info', isConfirm: false, onConfirm: null });
-
-  const showAlert = (title, message, type = 'info') => {
-    setPopup({ show: true, title, message, type, isConfirm: false, onConfirm: null });
-  };
-
-  const showConfirm = (title, message, onConfirmCallback) => {
-    setPopup({ show: true, title, message, type: 'warning', isConfirm: true, onConfirm: onConfirmCallback });
-  };
-
-  const closePopup = () => setPopup({ ...popup, show: false });
 
   const mutRed = '#c8102e';
 
+  const showAlert = (title, message, type = 'info') => setPopup({ show: true, title, message, type, isConfirm: false, onConfirm: null });
+  const showConfirm = (title, message, onConfirmCallback) => setPopup({ show: true, title, message, type: 'warning', isConfirm: true, onConfirm: onConfirmCallback });
+  const closePopup = () => setPopup({ ...popup, show: false });
+
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (searchBoxRef.current && !searchBoxRef.current.contains(event.target)) {
-        setShowPickupDropdown(false);
-        setShowDropoffDropdown(false);
-      }
+    const handleClickOutside = (e) => {
+      if (searchBoxRef.current && !searchBoxRef.current.contains(e.target)) { setShowPickupDropdown(false); setShowDropoffDropdown(false); }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   useEffect(() => {
-    fetch('http://localhost:5000/api/stations')
-      .then(res => res.json())
-      .then(data => setStations(data))
-      .catch(err => console.error(err));
+    fetch('http://localhost:5000/api/stations').then(res => res.json()).then(data => setStations(data)).catch(console.error);
   }, []);
 
-  useEffect(() => {
-    if (user?.user_code) {
-      fetchHistoryBookings();
-    }
-  }, [user, activeTab]);
+  useEffect(() => { if (user?.user_code) fetchHistoryBookings(); }, [user, activeTab]);
 
- useEffect(() => {
+  useEffect(() => {
     if (!pickupCode || !dropoffCode || pickupCode === dropoffCode || !travelDate) {
-      setSearchResults([]);
-      setSelectedResult(null);
-      return;
+      setSearchResults([]); setSelectedResult(null); return;
     }
     setIsLoadingSearch(true);
     setSelectedResult(null);
     
     fetch(`http://localhost:5000/api/booking/search?pickup_code=${pickupCode}&dropoff_code=${dropoffCode}&travel_date=${travelDate}`)
       .then(res => res.json())
-      .then(data => {
-        // ดักว่าถ้าข้อมูลที่ส่งมาเป็น Array ถึงจะเซ็ตค่า
-        if (Array.isArray(data)) {
-          setSearchResults(data);
-        } else {
-          // ถ้ามันพ่น Object Error มา ให้เซ็ตเป็นหน้าเปล่าแทน แอปจะได้ไม่แครช
-          setSearchResults([]);
-          console.error("Search API Error:", data);
-        }
-      })
-      .catch(err => console.error(err))
+      .then(data => Array.isArray(data) ? setSearchResults(data) : setSearchResults([]))
+      .catch(console.error)
       .finally(() => setIsLoadingSearch(false));
   }, [pickupCode, dropoffCode, travelDate]);
+
   const fetchHistoryBookings = () => {
-    fetch(`http://localhost:5000/api/user/bookings/${user.user_code}`)
-      .then(res => res.json())
-      .then(data => setHistoryBookings(data))
-      .catch(err => console.error("Error fetching history:", err));
+    fetch(`http://localhost:5000/api/user/bookings/${user.user_code}`).then(res => res.json()).then(data => setHistoryBookings(data)).catch(console.error);
   };
 
   const getStationName = (code) => {
@@ -111,158 +77,105 @@ const Booking = () => {
     return st ? st.stop_name : code;
   };
 
-  const calculateTravelMinutes = (startTime, endTime) => {
-    if (!startTime || !endTime) return '-';
-    try {
-      const [sh, sm] = startTime.split(':').map(Number);
-      const [eh, em] = endTime.split(':').map(Number);
-      let diff = (eh * 60 + em) - (sh * 60 + sm);
-      if (diff < 0) diff += 24 * 60; 
-      return diff;
-    } catch (e) {
-      return '-';
-    }
-  };
-
   const formatThaiDate = (dateString) => {
     if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
+    return new Date(dateString).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
+  // =====================================
+  // เพิ่มสินค้าลงตะกร้า (รองรับการแตกเป็น 2 เส้นทางถ้ามีจุดต่อรถ)
+  // =====================================
   const handleAddToCart = (e) => {
     e.preventDefault();
-    if (!selectedResult) {
-      return showAlert('แจ้งเตือน', 'กรุณาเลือกรอบการเดินทางก่อนเพิ่มลงรายการ', 'warning');
-    }
+    if (!selectedResult) return showAlert('แจ้งเตือน', 'กรุณาเลือกรอบการเดินทางก่อนเพิ่มลงรายการ', 'warning');
 
-    const activeSeatsInDB = historyBookings
-      .filter(b => b.status === 'ACTIVE')
-      .reduce((sum, b) => sum + b.passenger_count, 0);
-
+    const activeSeatsInDB = historyBookings.filter(b => b.status === 'ACTIVE').reduce((sum, b) => sum + b.passenger_count, 0);
     const seatsInCart = cart.reduce((sum, item) => sum + item.passenger_count, 0);
     const totalRequestedSeats = activeSeatsInDB + seatsInCart + passengerCount;
 
     if (totalRequestedSeats > 4) {
-      return showAlert(
-        'โควต้าเต็ม!', 
-        `โควต้าสูงสุด 4 ที่นั่ง/บัญชี\n(คุณมีรายการจองค้างอยู่ ${activeSeatsInDB} ที่นั่ง, ในตะกร้า ${seatsInCart} ที่นั่ง)`, 
-        'danger'
-      );
+      return showAlert('โควต้าเต็ม!', `โควต้าสูงสุด 4 ที่นั่ง/บัญชี\n(คุณมีรายการจองค้างอยู่ ${activeSeatsInDB} ที่นั่ง, ในตะกร้า ${seatsInCart} ที่นั่ง)`, 'danger');
     }
 
-    const newItem = {
-      id: Date.now(),
-      route_code: selectedResult.route_code,
-      route_name: selectedResult.route_name,
-      schedule_code: selectedResult.schedule_code,
-      schedule_time: selectedResult.expected_pickup_time,
-      pickup_order: selectedResult.pickup_order,
-      pickup_name: getStationName(pickupCode),
-      dropoff_order: selectedResult.dropoff_order,
-      dropoff_name: getStationName(dropoffCode),
-      passenger_count: passengerCount,
-      travel_date: travelDate 
-    };
+    if (selectedResult.is_transfer) {
+      // แตกเป็น 2 เส้นทางย่อย
+      const item1 = {
+        id: Date.now(),
+        route_name: selectedResult.leg1.route_name, schedule_code: selectedResult.leg1.schedule_code,
+        schedule_time: selectedResult.leg1.expected_pickup_time, pickup_order: selectedResult.leg1.pickup_order,
+        pickup_name: getStationName(pickupCode), dropoff_order: selectedResult.leg1.dropoff_order,
+        dropoff_name: selectedResult.transfer_station_name + " (จุดต่อรถ)", passenger_count: passengerCount, travel_date: travelDate 
+      };
+      const item2 = {
+        id: Date.now() + 1,
+        route_name: selectedResult.leg2.route_name, schedule_code: selectedResult.leg2.schedule_code,
+        schedule_time: selectedResult.leg2.expected_pickup_time, pickup_order: selectedResult.leg2.pickup_order,
+        pickup_name: selectedResult.transfer_station_name + " (จุดต่อรถ)", dropoff_order: selectedResult.leg2.dropoff_order,
+        dropoff_name: getStationName(dropoffCode), passenger_count: passengerCount, travel_date: travelDate 
+      };
+      setCart([...cart, item1, item2]);
+    } else {
+      // เส้นทางตรง
+      const newItem = {
+        id: Date.now(),
+        route_name: selectedResult.route_name, schedule_code: selectedResult.schedule_code,
+        schedule_time: selectedResult.expected_pickup_time, pickup_order: selectedResult.pickup_order,
+        pickup_name: getStationName(pickupCode), dropoff_order: selectedResult.dropoff_order,
+        dropoff_name: getStationName(dropoffCode), passenger_count: passengerCount, travel_date: travelDate 
+      };
+      setCart([...cart, newItem]);
+    }
 
-    setCart([...cart, newItem]);
-    setPickupCode('');
-    setDropoffCode('');
-    setSelectedResult(null);
-    setSearchResults([]);
+    setPickupCode(''); setDropoffCode(''); setSelectedResult(null); setSearchResults([]);
   };
 
   const handleRemoveItem = (id) => setCart(cart.filter(item => item.id !== id));
 
-  // ==========================================
-  // แก้ไขระบบส่งข้อมูลการจอง (รองรับ Master-Detail)
-  // ==========================================
   const handleConfirmCheckout = async () => {
     if (!user || !user.user_code) return showAlert('ผิดพลาด', 'กรุณาเข้าสู่ระบบก่อน', 'danger');
     if (cart.length === 0) return;
-
     setIsSubmitting(true);
-
     try {
-      // 1. จัดรูปแบบข้อมูล (Payload) โดยเอาของทุกชิ้นในตะกร้า (Cart) ไปใส่ใน Array ที่ชื่อว่า trips
       const payload = {
         user_code: user.user_code,
-        trips: cart.map(item => ({
-          schedule_code: item.schedule_code,
-          pickup_order: item.pickup_order,
-          dropoff_order: item.dropoff_order,
-          passenger_count: item.passenger_count,
-          travel_date: item.travel_date
-        }))
+        trips: cart.map(item => ({ schedule_code: item.schedule_code, pickup_order: item.pickup_order, dropoff_order: item.dropoff_order, passenger_count: item.passenger_count, travel_date: item.travel_date }))
       };
-
-      // 2. ยิง API ส่งไปบันทึกแค่ครั้งเดียว (ไม่ต้องวนลูปแบบเดิมแล้ว)
-      const response = await fetch('http://localhost:5000/api/bookings/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      
+      const response = await fetch('http://localhost:5000/api/bookings/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const result = await response.json();
       
       if (response.ok) {
-        fetchHistoryBookings(); 
-        setCart([]);
-        setActiveTab('history');
-        showAlert('จองตั๋วสำเร็จ', `คุณทำการจองตั๋วสำเร็จทั้งหมด ${cart.length} เส้นทาง\nรหัสอ้างอิง: ${result.booking_code}`, 'success');
+        fetchHistoryBookings(); setCart([]); setActiveTab('history');
+        showAlert('จองตั๋วสำเร็จ', `รหัสอ้างอิง: ${result.booking_code}\n(ระบบรวมเป็น QR Code เดียวให้แล้ว)`, 'success');
       } else {
         showAlert('ไม่สามารถจองตั๋วได้', result.message || 'เกิดข้อผิดพลาดในการจอง', 'danger');
       }
-    } catch (err) {
-      showAlert('ผิดพลาด', 'เกิดข้อผิดพลาดในการเชื่อมต่อเครือข่าย', 'danger');
-    } finally {
-      setIsSubmitting(false);
-    }
+    } catch (err) { showAlert('ผิดพลาด', 'เกิดข้อผิดพลาดในการเชื่อมต่อ', 'danger'); } finally { setIsSubmitting(false); }
   };
 
   const handleCancelBooking = (bookingCode) => {
-    showConfirm('ยืนยันการยกเลิก', 'คุณต้องการยกเลิกการเดินทางนี้ใช่หรือไม่? ที่นั่งจะถูกคืนเข้าสู่ระบบ', async () => {
+    showConfirm('ยืนยันการยกเลิก', 'คุณต้องการยกเลิกการเดินทางนี้ใช่หรือไม่?', async () => {
       try {
         const res = await fetch(`http://localhost:5000/api/bookings/${bookingCode}/cancel`, { method: 'PUT' });
-        if (res.ok) {
-          fetchHistoryBookings();
-          showAlert('สำเร็จ', 'ยกเลิกการจองเรียบร้อยแล้ว', 'success');
-        } else {
-          showAlert('ผิดพลาด', 'ไม่สามารถยกเลิกการจองได้', 'danger');
-        }
-      } catch (err) {
-        showAlert('ผิดพลาด', 'เกิดข้อผิดพลาดในการเชื่อมต่อเครือข่าย', 'danger');
-      }
+        if (res.ok) { fetchHistoryBookings(); showAlert('สำเร็จ', 'ยกเลิกการจองเรียบร้อยแล้ว', 'success'); }
+      } catch (err) { showAlert('ผิดพลาด', 'เกิดข้อผิดพลาดในการเชื่อมต่อ', 'danger'); }
     });
   };
 
-  const filteredBookings = historyFilter === 'ALL' 
-    ? historyBookings 
-    : historyBookings.filter(b => b.status === historyFilter);
-
   return (
     <div className="bg-light min-vh-100 position-relative pb-5">
-      
+      {/* ... (Modal ของ QR Code และ Popup คงเดิม) ... */}
       {selectedQRCode && (
         <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate-fade-in" style={{ zIndex: 10000, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(5px)' }}>
           <div className="bg-white rounded-4 shadow-lg p-4 text-center position-relative mx-3" style={{ maxWidth: '380px', width: '100%' }}>
             <button className="btn-close position-absolute top-0 end-0 m-3" onClick={() => setSelectedQRCode(null)}></button>
             <h4 className="fw-bold mb-3 text-dark mt-2">สแกนเพื่อขึ้นรถ</h4>
-            
-            <div className="bg-light p-3 border rounded-4 d-inline-block mb-3 shadow-sm">
-              <QRCodeSVG value={selectedQRCode.qr_code} size={220} />
-            </div>
-            
+            <div className="bg-light p-3 border rounded-4 d-inline-block mb-3 shadow-sm"><QRCodeSVG value={selectedQRCode.qr_code} size={220} /></div>
             <div className="fw-bold fs-3 text-dark mb-1" style={{ letterSpacing: '1px' }}>{selectedQRCode.booking_code}</div>
-            
             <div className="bg-danger bg-opacity-10 text-danger rounded-3 p-3 mb-4 mt-2">
               <p className="mb-0 fw-bold">กรุณาแสดง QR Code นี้ให้คนขับสแกน</p>
               <p className="small mb-0">ตั๋วใบนี้สามารถใช้เชื่อมต่อหลายเส้นทางได้</p>
             </div>
-            
-            <button className="btn text-white w-100 rounded-pill fw-bold py-3 shadow-sm fs-6" style={{ backgroundColor: mutRed }} onClick={() => setSelectedQRCode(null)}>
-              ปิดหน้าต่าง
-            </button>
+            <button className="btn text-white w-100 rounded-pill fw-bold py-3 shadow-sm fs-6" style={{ backgroundColor: mutRed }} onClick={() => setSelectedQRCode(null)}>ปิดหน้าต่าง</button>
           </div>
         </div>
       )}
@@ -280,13 +193,8 @@ const Booking = () => {
             <p className="text-secondary mb-4 px-2 text-start" style={{ whiteSpace: 'pre-line', fontSize: '14px', lineHeight: '1.6' }}>{popup.message}</p>
             <div className="d-flex gap-2 justify-content-center">
               {popup.isConfirm ? (
-                <>
-                  <button className="btn btn-light flex-fill rounded-pill fw-bold py-2" onClick={closePopup}>ยกเลิก</button>
-                  <button className="btn text-white flex-fill rounded-pill fw-bold py-2" style={{ backgroundColor: mutRed }} onClick={() => { closePopup(); popup.onConfirm(); }}>ยืนยัน</button>
-                </>
-              ) : (
-                <button className="btn text-white flex-fill rounded-pill fw-bold py-2" style={{ backgroundColor: mutRed }} onClick={closePopup}>ตกลง</button>
-              )}
+                <><button className="btn btn-light flex-fill rounded-pill fw-bold py-2" onClick={closePopup}>ยกเลิก</button><button className="btn text-white flex-fill rounded-pill fw-bold py-2" style={{ backgroundColor: mutRed }} onClick={() => { closePopup(); popup.onConfirm(); }}>ยืนยัน</button></>
+              ) : (<button className="btn text-white flex-fill rounded-pill fw-bold py-2" style={{ backgroundColor: mutRed }} onClick={closePopup}>ตกลง</button>)}
             </div>
           </div>
         </div>
@@ -296,7 +204,6 @@ const Booking = () => {
 
       <div className="position-relative" style={{ zIndex: 1 }}>
         <Navbar />
-        
         <div className="container text-center text-white mt-4 mb-5" style={{ maxWidth: '750px' }}>
           <h2 className="fw-bold mb-2">ค้นหาเที่ยวรถ</h2>
           <p className="opacity-75 small mb-0">บริการ Shuttle Bus มหาวิทยาลัยเทคโนโลยีมหานคร</p>
@@ -306,21 +213,11 @@ const Booking = () => {
           <div className="bg-white rounded-4 shadow-sm animate-fade-in">
             
             <div className="d-flex border-bottom bg-light rounded-top-4 overflow-hidden">
-              <button 
-                onClick={() => setActiveTab('booking')} 
-                className={`flex-fill btn border-0 py-3 fw-bold rounded-0 ${activeTab === 'booking' ? 'bg-white' : 'text-secondary'}`}
-                style={{ borderBottom: activeTab === 'booking' ? `3px solid ${mutRed}` : '3px solid transparent', color: activeTab === 'booking' ? mutRed : '', transition: 'all 0.2s' }}
-              >
-                <Search size={18} className="me-2 mb-1" />
-                ค้นหาเที่ยวรถ
+              <button onClick={() => setActiveTab('booking')} className={`flex-fill btn border-0 py-3 fw-bold rounded-0 ${activeTab === 'booking' ? 'bg-white' : 'text-secondary'}`} style={{ borderBottom: activeTab === 'booking' ? `3px solid ${mutRed}` : '3px solid transparent', color: activeTab === 'booking' ? mutRed : '', transition: 'all 0.2s' }}>
+                <Search size={18} className="me-2 mb-1" />ค้นหาเที่ยวรถ
               </button>
-              <button 
-                onClick={() => setActiveTab('history')} 
-                className={`flex-fill btn border-0 py-3 fw-bold rounded-0 ${activeTab === 'history' ? 'bg-white' : 'text-secondary'}`}
-                style={{ borderBottom: activeTab === 'history' ? `3px solid ${mutRed}` : '3px solid transparent', color: activeTab === 'history' ? mutRed : '', transition: 'all 0.2s' }}
-              >
-                <CalendarDays size={18} className="me-2 mb-1" />
-                การเดินทางของฉัน
+              <button onClick={() => setActiveTab('history')} className={`flex-fill btn border-0 py-3 fw-bold rounded-0 ${activeTab === 'history' ? 'bg-white' : 'text-secondary'}`} style={{ borderBottom: activeTab === 'history' ? `3px solid ${mutRed}` : '3px solid transparent', color: activeTab === 'history' ? mutRed : '', transition: 'all 0.2s' }}>
+                <CalendarDays size={18} className="me-2 mb-1" />การเดินทางของฉัน
               </button>
             </div>
 
@@ -330,50 +227,38 @@ const Booking = () => {
               {activeTab === 'booking' && (
                 <div className="animate-fade-in">
                   <form onSubmit={handleAddToCart}>
-                    
                     <div ref={searchBoxRef} className="border rounded-4 p-3 p-md-4 mb-3 bg-white position-relative shadow-sm" style={{ zIndex: 10 }}>
-                      
                       <div className="position-absolute" style={{ left: '41px', top: '55px', bottom: '55px', width: '2px', backgroundColor: '#e2e8f0', zIndex: 0 }}></div>
-
+                      
+                      {/* จุดขึ้นรถ */}
                       <div className="d-flex align-items-start mb-4 position-relative" style={{ zIndex: showPickupDropdown ? 100 : 2 }}>
-                        <div className="bg-light rounded-circle d-flex align-items-center justify-content-center border me-3 mt-1" style={{ width: '28px', height: '28px' }}>
-                          <div className="rounded-circle bg-secondary" style={{ width: '10px', height: '10px' }}></div>
-                        </div>
+                        <div className="bg-light rounded-circle d-flex align-items-center justify-content-center border me-3 mt-1" style={{ width: '28px', height: '28px' }}><div className="rounded-circle bg-secondary" style={{ width: '10px', height: '10px' }}></div></div>
                         <div className="custom-dropdown-container flex-fill">
                           <label className="text-muted small fw-semibold mb-1">จุดขึ้นรถ</label>
                           <div className="d-flex justify-content-between align-items-center cursor-pointer py-2 border-bottom border-2 bg-white" onClick={() => { setShowPickupDropdown(!showPickupDropdown); setShowDropoffDropdown(false); }}>
                             <span className={`fw-bold fs-6 ${pickupCode ? 'text-dark' : 'text-muted'}`}>{pickupCode ? getStationName(pickupCode) : 'เลือกจุดเริ่มต้น'}</span>
-                            <ChevronDown size={18} className="text-secondary" style={{ transform: showPickupDropdown ? 'rotate(180deg)' : 'rotate(0)' , transition: 'transform 0.2s'}} />
+                            <ChevronDown size={18} className="text-secondary" style={{ transform: showPickupDropdown ? 'rotate(180deg)' : 'rotate(0)' }} />
                           </div>
                           {showPickupDropdown && (
                             <div className="custom-dropdown-menu shadow-lg">
-                              {stations.map(st => (
-                                <div key={`p-${st.stop_code}`} className="custom-dropdown-item cursor-pointer py-3 border-bottom bg-white" onClick={() => { setPickupCode(st.stop_code); setShowPickupDropdown(false); if(dropoffCode === st.stop_code) setDropoffCode(''); }}>
-                                  {st.stop_name}
-                                </div>
-                              ))}
+                              {stations.map(st => (<div key={`p-${st.stop_code}`} className="custom-dropdown-item cursor-pointer py-3 border-bottom bg-white" onClick={() => { setPickupCode(st.stop_code); setShowPickupDropdown(false); if(dropoffCode === st.stop_code) setDropoffCode(''); }}>{st.stop_name}</div>))}
                             </div>
                           )}
                         </div>
                       </div>
 
+                      {/* จุดลงรถ */}
                       <div className="d-flex align-items-start position-relative" style={{ zIndex: showDropoffDropdown ? 100 : 1 }}>
-                        <div className="bg-white rounded-circle d-flex align-items-center justify-content-center border me-3 mt-1" style={{ width: '28px', height: '28px', borderColor: `${mutRed} !important` }}>
-                          <div className="rounded-circle" style={{ width: '10px', height: '10px', backgroundColor: mutRed }}></div>
-                        </div>
+                        <div className="bg-white rounded-circle d-flex align-items-center justify-content-center border me-3 mt-1" style={{ width: '28px', height: '28px', borderColor: `${mutRed} !important` }}><div className="rounded-circle" style={{ width: '10px', height: '10px', backgroundColor: mutRed }}></div></div>
                         <div className="custom-dropdown-container flex-fill">
                           <label className="text-muted small fw-semibold mb-1">จุดลงรถ</label>
                           <div className="d-flex justify-content-between align-items-center cursor-pointer py-2 border-bottom border-2 bg-white" onClick={() => { if(!pickupCode) return showAlert('แจ้งเตือน', 'กรุณาเลือกจุดขึ้นรถก่อน', 'warning'); setShowDropoffDropdown(!showDropoffDropdown); setShowPickupDropdown(false); }}>
                             <span className={`fw-bold fs-6 ${dropoffCode ? 'text-dark' : 'text-muted'}`}>{dropoffCode ? getStationName(dropoffCode) : 'เลือกจุดหมายปลายทาง'}</span>
-                            <ChevronDown size={18} className="text-secondary" style={{ transform: showDropoffDropdown ? 'rotate(180deg)' : 'rotate(0)' , transition: 'transform 0.2s'}} />
+                            <ChevronDown size={18} className="text-secondary" style={{ transform: showDropoffDropdown ? 'rotate(180deg)' : 'rotate(0)' }} />
                           </div>
                           {showDropoffDropdown && (
                             <div className="custom-dropdown-menu shadow-lg">
-                              {stations.filter(st => st.stop_code !== pickupCode).map(st => (
-                                <div key={`d-${st.stop_code}`} className="custom-dropdown-item cursor-pointer py-3 border-bottom bg-white" onClick={() => { setDropoffCode(st.stop_code); setShowDropoffDropdown(false); }}>
-                                  {st.stop_name}
-                                </div>
-                              ))}
+                              {stations.filter(st => st.stop_code !== pickupCode).map(st => (<div key={`d-${st.stop_code}`} className="custom-dropdown-item cursor-pointer py-3 border-bottom bg-white" onClick={() => { setDropoffCode(st.stop_code); setShowDropoffDropdown(false); }}>{st.stop_name}</div>))}
                             </div>
                           )}
                         </div>
@@ -385,17 +270,7 @@ const Booking = () => {
                         <CalendarDays size={22} className="text-secondary me-3" />
                         <div className="flex-fill">
                           <div className="text-muted small fw-semibold mb-1">วันที่เดินทาง</div>
-                          <input 
-                            type="date" 
-                            className="form-control border-0 p-0 fw-bold fs-6 bg-transparent" 
-                            value={travelDate}
-                            min={getTodayYMD()} 
-                            onChange={(e) => {
-                              setTravelDate(e.target.value);
-                              setSelectedResult(null);
-                            }}
-                            style={{ cursor: 'pointer', outline: 'none', boxShadow: 'none' }}
-                          />
+                          <input type="date" className="form-control border-0 p-0 fw-bold fs-6 bg-transparent" value={travelDate} min={new Date().toISOString().split('T')[0]} onChange={(e) => { setTravelDate(e.target.value); setSelectedResult(null); }} style={{ cursor: 'pointer', outline: 'none', boxShadow: 'none' }}/>
                         </div>
                       </div>
                     </div>
@@ -428,21 +303,31 @@ const Booking = () => {
 
                         <div className="d-flex flex-column gap-3">
                           {!isLoadingSearch && searchResults.map((res, idx) => {
-                            const inCartCount = cart.filter(item => item.schedule_code === res.schedule_code).reduce((sum, item) => sum + item.passenger_count, 0);
-                            const effectiveSeats = res.available_seats - inCartCount;
-                            const isFull = effectiveSeats < passengerCount;
-                            const isSelected = selectedResult?.schedule_code === res.schedule_code && selectedResult?.dropoff_order === res.dropoff_order;
-                            const travelMinutes = calculateTravelMinutes(res.expected_pickup_time, res.expected_dropoff_time);
-                            const stopsCount = res.dropoff_order - res.pickup_order;
+                            const isFull = res.available_seats < passengerCount;
+                            // แยกตัวแปรกดเลือกสำหรับ Direct และ Transfer
+                            const isSelected = res.is_transfer 
+                                ? (selectedResult?.is_transfer && selectedResult?.leg1.schedule_code === res.leg1.schedule_code && selectedResult?.leg2.schedule_code === res.leg2.schedule_code)
+                                : (selectedResult?.schedule_code === res.schedule_code && selectedResult?.dropoff_order === res.dropoff_order);
 
                             return (
-                              <div key={`${res.schedule_code}-${res.dropoff_order}-${idx}`} onClick={() => !isFull && setSelectedResult(res)} className={`card border shadow-sm rounded-4 interactive-card ${isFull ? 'disabled opacity-50 bg-light' : 'bg-white'}`} style={{ borderColor: isSelected ? mutRed : '#e2e8f0', borderWidth: isSelected ? '2px' : '1px' }}>
+                              <div key={idx} onClick={() => !isFull && setSelectedResult(res)} className={`card border shadow-sm rounded-4 interactive-card ${isFull ? 'disabled opacity-50 bg-light' : 'bg-white'}`} style={{ borderColor: isSelected ? mutRed : '#e2e8f0', borderWidth: isSelected ? '2px' : '1px' }}>
                                 <div className={`card-body p-4 ${isSelected ? 'bg-danger bg-opacity-10' : ''}`}>
+                                  
+                                  {/* ส่วนหัวแสดงชื่อสายรถ (รองรับแบบต่อรถ) */}
                                   <div className="d-flex justify-content-between align-items-center mb-4">
-                                    <span className="badge bg-dark text-white text-uppercase py-2 px-3 rounded-pill" style={{ fontSize: '11px' }}>{res.route_name}</span>
-                                    <span className={`small fw-bold ${isFull ? 'text-danger' : 'text-success'}`}>{isFull ? 'ที่นั่งไม่พอ' : `ว่าง ${effectiveSeats} ที่นั่ง`}</span>
+                                    {res.is_transfer ? (
+                                      <div className="d-flex align-items-center flex-wrap gap-2">
+                                        <span className="badge bg-dark text-white text-uppercase py-2 px-3 rounded-pill" style={{ fontSize: '11px' }}>{res.leg1.route_name}</span>
+                                        <ArrowRight size={14} className="text-secondary" />
+                                        <span className="badge bg-dark text-white text-uppercase py-2 px-3 rounded-pill" style={{ fontSize: '11px' }}>{res.leg2.route_name}</span>
+                                      </div>
+                                    ) : (
+                                      <span className="badge bg-dark text-white text-uppercase py-2 px-3 rounded-pill" style={{ fontSize: '11px' }}>{res.route_name}</span>
+                                    )}
+                                    <span className={`small fw-bold ${isFull ? 'text-danger' : 'text-success'}`}>{isFull ? 'ที่นั่งไม่พอ' : `ว่าง ${res.available_seats} ที่นั่ง`}</span>
                                   </div>
                                   
+                                  {/* เวลาเดินทาง */}
                                   <div className="d-flex align-items-center justify-content-between mb-2">
                                     <div className="text-center" style={{ minWidth: '85px' }}>
                                       <div className="text-muted small text-nowrap mb-1" style={{ fontSize: '12px' }}>เวลาขึ้นรถ</div>
@@ -450,13 +335,18 @@ const Booking = () => {
                                     </div>
                                     
                                     <div className="flex-fill px-2 px-md-3 text-center position-relative">
-                                      <div className="text-dark fw-bold mb-2" style={{ fontSize: '13px' }}>{travelMinutes} นาที</div>
+                                      {res.is_transfer ? (
+                                        <div className="badge bg-warning text-dark py-1 px-2 mb-2 w-100 text-truncate" style={{ fontSize: '11px' }}>
+                                          <Navigation size={10} className="me-1"/> ต่อรถที่: {res.transfer_station_name}
+                                        </div>
+                                      ) : (
+                                        <div className="text-dark fw-bold mb-2" style={{ fontSize: '13px' }}>วิ่งตรง</div>
+                                      )}
                                       <div className="d-flex align-items-center">
                                         <div className="rounded-circle border border-2 border-secondary bg-white" style={{ width: '8px', height: '8px' }}></div>
                                         <div className="flex-fill border-top border-secondary border-2 opacity-25 mx-1"></div>
                                         <div className="rounded-circle border border-2 border-secondary bg-white" style={{ width: '8px', height: '8px' }}></div>
                                       </div>
-                                      <div className="text-muted small mt-2" style={{ fontSize: '12px' }}>ผ่าน {stopsCount} สถานี</div>
                                     </div>
 
                                     <div className="text-center" style={{ minWidth: '85px' }}>
@@ -465,13 +355,6 @@ const Booking = () => {
                                     </div>
                                   </div>
                                 </div>
-
-                                {isSelected && (
-                                  <div className="bg-white p-3 border-top d-flex justify-content-center gap-4 animate-fade-in" style={{ fontSize: '13px' }}>
-                                    <div className="d-flex align-items-center text-secondary"><Info size={16} className="me-2 text-dark" /> {res.total_capacity <= 15 ? 'รถตู้' : 'มินิบัส'}</div>
-                                    <div className="d-flex align-items-center text-secondary"><Users size={16} className="me-2 text-dark" /> {res.total_capacity} ที่นั่ง</div>
-                                  </div>
-                                )}
                               </div>
                             );
                           })}
@@ -480,7 +363,7 @@ const Booking = () => {
                     )}
 
                     <button type="submit" className="btn w-100 py-3 rounded-4 fw-bold mt-5 shadow-sm text-white interactive-card fs-6" style={{ backgroundColor: mutRed }} disabled={!selectedResult}>
-                      จอง
+                      เพิ่มลงตะกร้า
                     </button>
                   </form>
 
@@ -495,8 +378,7 @@ const Booking = () => {
                           <div key={item.id} className="bg-white p-3 p-md-4 rounded-4 border shadow-sm d-flex justify-content-between align-items-center">
                             <div className="flex-fill pe-2">
                               <div className="fw-bold mb-1">
-                                {item.route_name}
-                                <span className="text-muted small fw-normal ms-2 d-inline-block">({formatThaiDate(item.travel_date)})</span>
+                                {item.route_name} <span className="text-muted small fw-normal ms-2 d-inline-block">({formatThaiDate(item.travel_date)})</span>
                               </div>
                               <div className="text-muted small" style={{ fontSize: '12px' }}>
                                 {item.pickup_name} <span className="fw-bold text-dark mx-1 text-nowrap">{item.schedule_time}</span> <span className="mx-1">→</span> {item.dropoff_name}
@@ -516,29 +398,19 @@ const Booking = () => {
                   )}
                 </div>
               )}
-{/* --- HISTORY TAB --- */}
+
+              {/* --- HISTORY TAB (ส่วนประวัติไม่มีการแก้ ปล่อยไว้เหมือนเดิมได้เลย) --- */}
               {activeTab === 'history' && (
                 <div className="animate-fade-in">
-                  
                   <div className="d-flex gap-2 overflow-auto pb-3 mb-4 hide-scrollbar" style={{ whiteSpace: 'nowrap' }}>
                     {['ACTIVE', 'ONGOING', 'COMPLETED', 'NO_SHOW', 'CANCELLED', 'ALL'].map(status => {
-                      const labels = { 
-                        ACTIVE: 'กำลังดำเนินการ', 
-                        ONGOING: 'กำลังเดินทาง', 
-                        COMPLETED: 'เดินทางแล้ว', 
-                        NO_SHOW: 'ไม่มาแสดงตัว', 
-                        CANCELLED: 'ยกเลิก', 
-                        ALL: 'ทั้งหมด' 
-                      };
+                      const labels = { ACTIVE: 'กำลังดำเนินการ', ONGOING: 'กำลังเดินทาง', COMPLETED: 'เดินทางแล้ว', NO_SHOW: 'ไม่มาแสดงตัว', CANCELLED: 'ยกเลิก', ALL: 'ทั้งหมด' };
                       const isActive = historyFilter === status;
                       return (
-                        <button key={status} onClick={() => setHistoryFilter(status)} className={`btn rounded-pill px-4 py-2 small fw-bold border-0 interactive-card ${isActive ? 'text-white shadow-sm' : 'bg-light text-secondary border'}`} style={{ backgroundColor: isActive ? mutRed : '' }}>
-                          {labels[status]}
-                        </button>
+                        <button key={status} onClick={() => setHistoryFilter(status)} className={`btn rounded-pill px-4 py-2 small fw-bold border-0 interactive-card ${isActive ? 'text-white shadow-sm' : 'bg-light text-secondary border'}`} style={{ backgroundColor: isActive ? mutRed : '' }}>{labels[status]}</button>
                       )
                     })}
                   </div>
-
                   <div className="d-flex flex-column gap-4">
                     {historyBookings.length === 0 ? (
                       <div className="text-center p-5 bg-light rounded-4 border text-muted animate-fade-in">
@@ -547,64 +419,31 @@ const Booking = () => {
                       </div>
                     ) : (
                       (() => {
-                        // 1. จัดกลุ่มข้อมูลทั้งหมดก่อน (Group by booking_code)
                         const grouped = Object.values(historyBookings.reduce((acc, item) => {
-                          if (!acc[item.booking_code]) {
-                            acc[item.booking_code] = {
-                              booking_code: item.booking_code,
-                              travel_date: item.travel_date,
-                              qr_code: item.qr_code,
-                              passenger_count: item.passenger_count,
-                              routes: []
-                            };
-                          }
-                          acc[item.booking_code].routes.push(item);
-                          return acc;
+                          if (!acc[item.booking_code]) { acc[item.booking_code] = { booking_code: item.booking_code, travel_date: item.travel_date, qr_code: item.qr_code, passenger_count: item.passenger_count, routes: [] }; }
+                          acc[item.booking_code].routes.push(item); return acc;
                         }, {}));
 
-                        // 2. คำนวณสถานะรวมของการ์ด และ Filter ตามแท็บที่เลือก
                         const displayGroups = grouped.filter(group => {
                           const allCancelled = group.routes.every(r => r.status === 'CANCELLED');
                           const allNoShow = group.routes.every(r => r.status === 'NO_SHOW');
                           const allFinished = group.routes.every(r => ['COMPLETED', 'CANCELLED', 'NO_SHOW'].includes(r.status));
                           const anyOngoing = group.routes.some(r => r.status === 'ONGOING');
                           
-                          // กำหนดภาพรวมว่าบิลนี้อยู่สถานะไหน
-                          if (allCancelled) group.overall_status = 'CANCELLED';
-                          else if (allNoShow) group.overall_status = 'NO_SHOW';
-                          else if (allFinished) group.overall_status = 'COMPLETED';
-                          else if (anyOngoing) group.overall_status = 'ONGOING';
-                          else group.overall_status = 'ACTIVE';
-
-                          // ให้แสดงการ์ดใบนี้ ถ้าในเส้นทางย่อยมีสถานะตรงกับแท็บที่กด หรือ แท็บคือ 'ALL'
+                          if (allCancelled) group.overall_status = 'CANCELLED'; else if (allNoShow) group.overall_status = 'NO_SHOW'; else if (allFinished) group.overall_status = 'COMPLETED'; else if (anyOngoing) group.overall_status = 'ONGOING'; else group.overall_status = 'ACTIVE';
                           if (historyFilter === 'ALL') return true;
                           return group.routes.some(r => r.status === historyFilter) || group.overall_status === historyFilter;
                         });
 
-                        if (displayGroups.length === 0) {
-                          return (
-                            <div className="text-center p-5 bg-light rounded-4 border text-muted animate-fade-in">
-                              <Search size={48} className="opacity-25 mb-3 mx-auto" />
-                              <p className="mb-0">ไม่มีรายการในสถานะนี้</p>
-                            </div>
-                          );
-                        }
+                        if (displayGroups.length === 0) return (<div className="text-center p-5 bg-light rounded-4 border text-muted animate-fade-in"><Search size={48} className="opacity-25 mb-3 mx-auto" /><p className="mb-0">ไม่มีรายการในสถานะนี้</p></div>);
 
                         return displayGroups.map((group) => (
                           <div key={group.booking_code} className="card border shadow-sm rounded-4 overflow-hidden animate-fade-in">
-                            {/* Header การ์ด */}
                             <div className="card-header bg-light border-bottom pt-4 px-4 pb-3 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
                               <div>
-                                <div className="d-flex align-items-center mb-1">
-                                  <span className="fw-bold text-dark fs-5" style={{ letterSpacing: '0.5px' }}>{group.booking_code}</span>
-                                </div>
-                                <div className="d-flex align-items-center text-secondary small">
-                                  <CalendarDays size={14} className="me-2" />
-                                  วันที่เดินทาง: {formatThaiDate(group.travel_date)}
-                                </div>
+                                <div className="d-flex align-items-center mb-1"><span className="fw-bold text-dark fs-5" style={{ letterSpacing: '0.5px' }}>{group.booking_code}</span></div>
+                                <div className="d-flex align-items-center text-secondary small"><CalendarDays size={14} className="me-2" /> วันที่เดินทาง: {formatThaiDate(group.travel_date)}</div>
                               </div>
-                              
-                              {/* ป้ายสถานะรวมของการ์ด (พิจารณาจากภาพรวม) */}
                               <div>
                                 {group.overall_status === 'ACTIVE' && <span className="badge bg-warning text-dark px-3 py-2 rounded-pill d-flex align-items-center"><Clock size={12} className="me-1"/> มีรายการรอเดินทาง</span>}
                                 {group.overall_status === 'ONGOING' && <span className="badge bg-info text-white px-3 py-2 rounded-pill d-flex align-items-center"><Navigation size={12} className="me-1"/> มีเส้นทางกำลังเดินทาง</span>}
@@ -615,32 +454,25 @@ const Booking = () => {
                             </div>
                             
                             <div className="card-body p-0">
-                              {/* ลิสต์เส้นทางย่อย */}
                               <div className="p-4 bg-white">
                                 {group.routes.map((route, idx) => {
-                                  // ถ้าเส้นทางไหนโดนยกเลิก หรือไม่มาขึ้นรถ จะทำตัวอักษรจางและขีดฆ่าให้ดูรู้เรื่อง
                                   const isDimmed = ['CANCELLED', 'NO_SHOW'].includes(route.status);
-                                  
                                   return (
                                   <div key={route.detail_code} className={`d-flex ${idx !== group.routes.length - 1 ? 'mb-4 pb-4 border-bottom border-dashed' : ''} ${isDimmed ? 'opacity-50' : ''}`}>
                                     <div className="me-3 me-md-4 text-center" style={{ minWidth: '70px' }}>
                                       <div className="text-muted small mb-1 text-nowrap">เวลาขึ้นรถ</div>
                                       <div className="fw-bold fs-3 text-primary text-nowrap" style={{ letterSpacing: '-1px' }}>{route.start_time}</div>
                                     </div>
-                                    
                                     <div className="position-relative px-2 d-flex flex-column align-items-center">
                                       <div className="rounded-circle border border-3 bg-white z-1" style={{ width: '14px', height: '14px', borderColor: mutRed }}></div>
                                       <div className="border-start border-2 opacity-25 flex-fill my-1" style={{ borderColor: mutRed }}></div>
                                       <div className="rounded-circle z-1" style={{ width: '14px', height: '14px', backgroundColor: mutRed }}></div>
                                     </div>
-                                    
                                     <div className="ms-3 ms-md-4 flex-fill pb-1 d-flex flex-column justify-content-between">
                                       <div>
                                         <div className="d-flex align-items-center gap-2 mb-1 flex-wrap">
                                           <span className="badge bg-light text-secondary border small">เส้นทางที่ {idx + 1}</span>
                                           <span className="text-muted small">{route.route_name}</span>
-                                          
-                                          {/* [จุดสำคัญ!] เพิ่มป้ายสถานะแยกแต่ละเส้นทางตรงนี้ */}
                                           {route.status === 'ACTIVE' && <span className="badge bg-warning text-dark" style={{fontSize: '10px'}}>รอขึ้นรถ</span>}
                                           {route.status === 'ONGOING' && <span className="badge bg-info text-white" style={{fontSize: '10px'}}>กำลังเดินทาง</span>}
                                           {route.status === 'COMPLETED' && <span className="badge bg-success text-white" style={{fontSize: '10px'}}>✓ สแกนแล้ว</span>}
@@ -655,40 +487,22 @@ const Booking = () => {
                                 )})}
                               </div>
 
-                              {/* ซ่อน QR Code และปุ่มยกเลิก หากทุกเส้นทางเดินทางเสร็จแล้วหรือถูกยกเลิกหมดแล้ว */}
                               {['ACTIVE', 'ONGOING'].includes(group.overall_status) && (
                                 <div className="bg-light p-4 border-top d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
                                   <div className="d-flex align-items-center w-100">
-                                    <div 
-                                      className="d-flex align-items-center cursor-pointer p-2 rounded-4 bg-white border shadow-sm interactive-card me-3" 
-                                      onClick={() => setSelectedQRCode(group)} 
-                                      style={{ transition: 'all 0.2s' }}
-                                    >
+                                    <div className="d-flex align-items-center cursor-pointer p-2 rounded-4 bg-white border shadow-sm interactive-card me-3" onClick={() => setSelectedQRCode(group)}>
                                       <QRCodeSVG value={group.qr_code} size={50} />
                                     </div>
                                     <div>
-                                      <div className="fw-semibold text-dark mb-1 d-flex align-items-center">
-                                        <Users size={16} className="me-2 text-secondary"/> ผู้โดยสาร {group.passenger_count} ท่าน
-                                      </div>
-                                      <div className="text-danger small fw-bold cursor-pointer" onClick={() => setSelectedQRCode(group)}>
-                                        🔍 กดขยาย QR Code
-                                      </div>
+                                      <div className="fw-semibold text-dark mb-1 d-flex align-items-center"><Users size={16} className="me-2 text-secondary"/> ผู้โดยสาร {group.passenger_count} ท่าน</div>
+                                      <div className="text-danger small fw-bold cursor-pointer" onClick={() => setSelectedQRCode(group)}>🔍 กดขยาย QR Code</div>
                                     </div>
                                   </div>
-
-                                  {/* จะปุ่มให้ยกเลิกได้ ก็ต่อเมื่อยังมีเส้นทางใดเส้นทางหนึ่งในบิลที่เป็น ACTIVE รอขึ้นรถอยู่ */}
                                   {group.routes.some(r => r.status === 'ACTIVE') && (
-                                    <button 
-                                      onClick={() => handleCancelBooking(group.booking_code)} 
-                                      className="btn btn-outline-danger rounded-pill px-4 py-2 fw-bold interactive-card w-100 text-nowrap" 
-                                      style={{ maxWidth: '200px' }}
-                                    >
-                                      ยกเลิกที่ยังไม่เดินทาง
-                                    </button>
+                                    <button onClick={() => handleCancelBooking(group.booking_code)} className="btn btn-outline-danger rounded-pill px-4 py-2 fw-bold interactive-card w-100 text-nowrap" style={{ maxWidth: '200px' }}>ยกเลิกที่ยังไม่เดินทาง</button>
                                   )}
                                 </div>
                               )}
-
                             </div>
                           </div>
                         ));
@@ -697,7 +511,6 @@ const Booking = () => {
                   </div>
                 </div>
               )}
-
             </div>
           </div>
         </div>
